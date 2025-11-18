@@ -1,0 +1,63 @@
+# RBT Vector Tiles Production Container
+# ====================================
+# Container for continuous operations (OSM updates and tile generation)
+
+FROM ubuntu:22.04
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client-14 \
+    gdal-bin \
+    python3-gdal \
+    wget \
+    curl \
+    sqlite3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Imposm3
+RUN wget -O imposm.tar.gz https://github.com/omniscale/imposm3/releases/download/v0.11.1/imposm-0.11.1-linux-x86-64.tar.gz \
+    && tar xzf imposm.tar.gz \
+    && mv imposm-0.11.1-linux-x86-64/imposm /usr/local/bin/ \
+    && rm -rf imposm*
+
+# Install Tippecanoe
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libsqlite3-dev \
+    zlib1g-dev \
+    git \
+    && git clone https://github.com/mapbox/tippecanoe.git \
+    && cd tippecanoe \
+    && make -j$(nproc) \
+    && make install \
+    && cd .. \
+    && rm -rf tippecanoe \
+    && apt-get remove -y build-essential git \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy application files
+COPY production/ ./production/
+COPY config/ ./config/
+COPY tools/ ./tools/
+
+# Make scripts executable
+RUN find ./production -name "*.sh" -exec chmod +x {} \; \
+    && find ./tools -name "*.sh" -exec chmod +x {} \;
+
+# Create output directories
+RUN mkdir -p output/logs output/tiles cache
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ./tools/health-check.sh || exit 1
+
+# Default command (tile generation)
+CMD ["./production/generate-tiles.sh", "--all"]

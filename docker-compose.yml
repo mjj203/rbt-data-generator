@@ -1,0 +1,194 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database with PostGIS
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: rbt-postgres
+    environment:
+      - POSTGRES_DB=${PG_DATABASE:-rbt}
+      - POSTGRES_USER=${PG_USR:-rbt_user}
+      - POSTGRES_PASSWORD=${PG_PASS:-rbt_password}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - rbt-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USR:-rbt_user} -d ${PG_DATABASE:-rbt}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Database initialization (one-time)
+  rbt-setup:
+    build: 
+      context: .
+      dockerfile: Dockerfile.setup
+    container_name: rbt-setup
+    environment:
+      - PG_HOST=postgres
+      - PG_USR=${PG_USR:-rbt_user}
+      - PG_PASS=${PG_PASS:-rbt_password}
+      - PG_DATABASE=${PG_DATABASE:-rbt}
+      - MAX_PARALLEL_JOBS=${MAX_PARALLEL_JOBS:-4}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./setup:/app/setup
+      - ./config:/app/config
+      - ./tools:/app/tools
+      - ./output:/app/output
+      - setup_cache:/app/cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rbt-network
+    profiles:
+      - setup
+
+  # Continuous OSM updates
+  rbt-osm-updates:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: rbt-osm-updates
+    environment:
+      - PG_HOST=postgres
+      - PG_USR=${PG_USR:-rbt_user}
+      - PG_PASS=${PG_PASS:-rbt_password}
+      - PG_DATABASE=${PG_DATABASE:-rbt}
+    volumes:
+      - ./production:/app/production
+      - ./setup/data-sources/osm:/app/osm-config
+      - ./output:/app/output
+      - osm_cache:/app/cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rbt-network
+    restart: unless-stopped
+    command: ["./production/update-osm.sh", "run"]
+    profiles:
+      - production
+
+  # Tile generation service
+  rbt-tiles:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: rbt-tiles
+    environment:
+      - PG_HOST=postgres
+      - PG_USR=${PG_USR:-rbt_user}
+      - PG_PASS=${PG_PASS:-rbt_password}
+      - PG_DATABASE=${PG_DATABASE:-rbt}
+      - TILE_CACHE_DIR=/app/output/tiles
+    volumes:
+      - ./production:/app/production
+      - ./config:/app/config
+      - ./output:/app/output
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rbt-network
+    profiles:
+      - production
+
+  # Smoke test runner
+  rbt-smoke:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: rbt-smoke
+    environment:
+      - PG_HOST=postgres
+      - PG_USR=${PG_USR:-rbt_user}
+      - PG_PASS=${PG_PASS:-rbt_password}
+      - PG_DATABASE=${PG_DATABASE:-rbt}
+    working_dir: /app
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rbt-network
+    command: ["./tools/smoke-test.sh"]
+    profiles:
+      - smoke
+
+  # Optional: Tile server for serving generated tiles
+  tile-server:
+    image: maptiler/tileserver-gl:latest
+    container_name: rbt-tile-server
+    volumes:
+      - ./output/tiles:/data
+      - ./config/tile-server.json:/app/config.json:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - rbt-tiles
+    networks:
+      - rbt-network
+    profiles:
+      - serve
+    restart: unless-stopped
+
+  # Optional: Monitoring and metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: rbt-prometheus
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - rbt-network
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+    driver: local
+  setup_cache:
+    driver: local
+  osm_cache:
+    driver: local
+  prometheus_data:
+    driver: local
+
+networks:
+  rbt-network:
+    driver: bridge
+
+# =============================================================================
+# Usage Examples:
+# =============================================================================
+#
+# Initial setup (one-time):
+#   docker-compose --profile setup up rbt-setup
+#
+# Production operations:
+#   docker-compose --profile production up -d
+#
+# With tile server:
+#   docker-compose --profile production --profile serve up -d
+#
+# With monitoring:
+#   docker-compose --profile production --profile monitoring up -d
+#
+# Generate tiles manually:
+#   docker-compose exec rbt-tiles ./production/generate-tiles.sh --all
+#
+# Check OSM update status:
+#   docker-compose exec rbt-osm-updates ./production/update-osm.sh status
+#
+# =============================================================================

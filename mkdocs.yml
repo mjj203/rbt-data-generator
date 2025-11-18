@@ -1,0 +1,137 @@
+site_name: RBT Vector Tiles Documentation
+site_description: Comprehensive geospatial vector tile generation system for multi-projection mapping
+site_author: Michael Jones
+site_url: https://rbt.pages.dso.xc.nga.mil/etl/vectortiles
+
+# Repository
+repo_name: vectortiles
+repo_url: https://gitlab.dso.xc.nga.mil/RBT/etl/vectortiles
+edit_uri: edit/main/docs/
+
+
+# Configuration
+theme:
+  name: material
+  palette:
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - search.share
+    - header.autohide
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+    - toc.follow
+    - toc.integrate
+  icon:
+    repo: fontawesome/brands/git-alt
+    edit: material/pencil
+    view: material/eye
+  font:
+    text: Roboto
+    code: Roboto Mono
+  logo: assets/agc-logo-transparent.png
+  favicon: assets/favicon.ico
+
+# Plugins
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - mermaid2
+  - git-revision-date-localized:
+      enable_creation_date: true
+  - swagger-ui-tag:
+      tryItOutEnabled: true
+  - pdf-export:
+      verbose: true
+      media_type: print
+      enabled_if_env: ENABLE_PDF_EXPORT
+  - print-site:
+      add_to_navigation: true
+# Extensions
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      title: On this page
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+
+# Customization
+extra:
+  version:
+    provider: mike
+  social:
+    - icon: fontawesome/brands/github
+      link: https://gitlab.dso.xc.nga.mil/RBT/etl/vectortiles
+      name: GitHub Repository
+  status:
+    new: Recently added
+    deprecated: Deprecated
+
+# Page tree
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Architecture: architecture.md
+  - Database Setup:
+    - Database Initialization: database-initialization.md
+    - OSM Import Pipeline: osm-import.md
+    - Setup Documentation: setup-readme.md
+  - Layer Processing:
+    - Physical Layers: physical-layers.md
+    - Cultural Layers: cultural-layers.md
+  - Production Operations:
+    - Production Guide: production-readme.md
+  - Specialized Processing:
+    - DuckDB Buildings Export: duckdb-buildings.md
+  - API References:
+    - MapProxy APIs: api/mapproxy-api.md
+    - Tileserver-GL APIs: api/tileserver-api.md

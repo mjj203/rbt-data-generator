@@ -1,0 +1,312 @@
+openapi: 3.0.3
+info:
+  title: MapProxy API
+  description: |
+    MapProxy is an open source proxy for geospatial data that caches, accelerates and transforms data from existing map services.
+    
+    Supported services:
+    - WMS (Web Map Service) 1.0.0-1.3.0
+    - WMTS (Web Map Tile Service) 1.0.0
+  version: 1.15.1
+  contact:
+    name: MapProxy
+    url: https://mapproxy.org
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://mapproxy-rbt-agc-dev.apps.kubic.dev.ngaxc.net/
+    description: Production server
+
+paths:
+  # WMS Endpoints
+  /service:
+    get:
+      tags: [WMS]
+      summary: WMS GetCapabilities, GetMap, GetFeatureInfo
+      description: |
+        OGC Web Map Service endpoint supporting versions 1.0.0, 1.1.0, 1.1.1, 1.3.0.
+        Handles GetCapabilities, GetMap, and GetFeatureInfo requests.
+      parameters:
+        - name: SERVICE
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [WMS]
+          description: Service type
+        - name: REQUEST
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [GetCapabilities, GetMap, GetFeatureInfo]
+          description: Request type
+        - name: VERSION
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: ['1.0.0', '1.1.0', '1.1.1', '1.3.0']
+          description: WMS version
+        - name: LAYERS
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated list of layer names (for GetMap/GetFeatureInfo)
+        - name: BBOX
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Bounding box coordinates (for GetMap/GetFeatureInfo)
+        - name: WIDTH
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Image width in pixels (for GetMap)
+        - name: HEIGHT
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Image height in pixels (for GetMap)
+        - name: FORMAT
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ['image/png', 'image/jpeg', 'image/gif']
+          description: Image format (for GetMap)
+        - name: SRS
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Spatial Reference System (for GetMap/GetFeatureInfo)
+        - name: CRS
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Coordinate Reference System (WMS 1.3.0)
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/xml:
+              description: WMS Capabilities document
+            image/png:
+              description: Map image (PNG format)
+            image/jpeg:
+              description: Map image (JPEG format)
+            text/xml:
+              description: FeatureInfo response
+            text/html:
+              description: FeatureInfo response (HTML)
+
+  # WMTS RESTful Endpoints
+  /wmts/{layer}/{tilematrixset}/{tilematrix}/{tilerow}/{tilecol}.{format}:
+    get:
+      tags: [WMTS]
+      summary: WMTS RESTful tile request
+      description: |
+        RESTful WMTS endpoint for retrieving individual tiles.
+        Format: /wmts/{layer}/{tilematrixset}/{tilematrix}/{tilerow}/{tilecol}.{format}
+      parameters:
+        - name: layer
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Layer identifier
+        - name: tilematrixset
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Tile matrix set identifier (e.g., GLOBAL_MERCATOR, GLOBAL_GEODETIC)
+        - name: tilematrix
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Tile matrix (zoom level)
+        - name: tilerow
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Tile row coordinate
+        - name: tilecol
+          in: path
+          required: true
+          schema:
+            type: integer  
+          description: Tile column coordinate
+        - name: format
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [png, jpg, jpeg]
+          description: Tile format
+      responses:
+        '200':
+          description: Tile image
+          content:
+            image/png:
+              description: PNG tile
+            image/jpeg:
+              description: JPEG tile
+        '404':
+          description: Tile not found
+
+  # WMTS KVP Endpoint  
+  /wmts:
+    get:
+      tags: [WMTS]
+      summary: WMTS KVP requests
+      description: |
+        WMTS Key-Value Pair endpoint for GetCapabilities and GetTile requests.
+      parameters:
+        - name: SERVICE
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [WMTS]
+        - name: REQUEST
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [GetCapabilities, GetTile]
+        - name: VERSION
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: ['1.0.0']
+        - name: LAYER
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Layer identifier (for GetTile)
+        - name: TILEMATRIXSET
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Tile matrix set identifier (for GetTile)
+        - name: TILEMATRIX
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Tile matrix/zoom level (for GetTile)
+        - name: TILEROW
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Tile row (for GetTile)
+        - name: TILECOL
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Tile column (for GetTile)
+        - name: FORMAT
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ['image/png', 'image/jpeg']
+          description: Tile format (for GetTile)
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/xml:
+              description: WMTS Capabilities
+            image/png:
+              description: Tile image (PNG)
+            image/jpeg:
+              description: Tile image (JPEG)
+
+  # Demo Interface
+  /demo:
+    get:
+      tags: [Demo]
+      summary: MapProxy demo interface
+      description: Interactive web interface for testing MapProxy services
+      responses:
+        '200':
+          description: Demo interface HTML
+          content:
+            text/html:
+              description: MapProxy demo page
+
+components:
+  schemas:
+    Layer:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Layer identifier
+        title:
+          type: string
+          description: Human-readable layer title
+        abstract:
+          type: string
+          description: Layer description
+        bbox:
+          type: array
+          items:
+            type: number
+          description: Layer bounding box [minx, miny, maxx, maxy]
+        srs:
+          type: array
+          items:
+            type: string
+          description: Supported spatial reference systems
+        formats:
+          type: array
+          items:
+            type: string
+          description: Supported image formats
+    
+    TileMatrixSet:
+      type: object
+      properties:
+        identifier:
+          type: string
+          description: TileMatrixSet identifier
+        srs:
+          type: string
+          description: Spatial reference system
+        bbox:
+          type: array
+          items:
+            type: number
+          description: Bounding box
+        tile_size:
+          type: array
+          items:
+            type: integer
+          description: Tile dimensions [width, height]
+
+tags:
+  - name: WMS
+    description: Web Map Service endpoints
+  - name: WMTS  
+    description: Web Map Tile Service endpoints
+  - name: Demo
+    description: Demo interface endpoints

@@ -1,0 +1,1148 @@
+openapi: 3.0.3
+info:
+  title: TileServer-GL API
+  description: |
+    TileServer-GL is a Node.js-based server for serving raster and vector map tiles from MBTiles files, with support for static map images, styles, sprites, fonts, and more.
+    
+    This API provides endpoints for:
+    - Serving map styles and TileJSON metadata
+    - Rendering map tiles in various formats (PNG, JPG, WebP)
+    - Generating static map images with overlays
+    - Serving raw vector/raster tile data
+    - Providing map fonts and sprites
+    - Health monitoring
+  version: 4.x.x
+  contact:
+    name: TileServer-GL
+    url: https://github.com/maptiler/tileserver-gl
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080/
+    description: Default local server
+  - url: https://tileserver-rbt-agc-dev.apps.kubic.dev.ngaxc.net/
+    description: Production server
+
+tags:
+  - name: Styles
+    description: Map styles, sprites, and fonts
+  - name: Rendered Tiles  
+    description: Rendered map tiles and TileJSON
+  - name: Static Images
+    description: Static map image generation
+  - name: Source Data
+    description: Raw tile data and elevation queries
+  - name: Static Files
+    description: Static file serving
+  - name: Metadata
+    description: Server metadata and indexes
+  - name: Health
+    description: Health monitoring
+
+paths:
+  /styles.json:
+    get:
+      tags: [Styles]
+      summary: List all available styles
+      description: Returns an array of all available map styles
+      responses:
+        '200':
+          description: Array of style objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StyleInfo'
+
+  /styles/{id}/style.json:
+    get:
+      tags: [Styles]
+      summary: Get style JSON
+      description: Returns the Mapbox GL JS style specification for the given style
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Style identifier
+          example: basic
+      responses:
+        '200':
+          description: Mapbox GL JS style JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StyleJSON'
+        '404':
+          description: Style not found
+
+  /styles/{id}/sprite{spriteID}@{ratio}.{format}:
+    get:
+      tags: [Styles]
+      summary: Get style sprite
+      description: Returns sprite images and metadata for the style
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Style identifier
+        - name: spriteID
+          in: path
+          required: false
+          schema:
+            type: string
+          description: Optional sprite ID
+        - name: ratio
+          in: path
+          required: false
+          schema:
+            type: string
+            enum: ["1x", "2x", "3x", "4x"]
+            default: "1x"
+          description: Pixel ratio for HiDPI displays
+        - name: format
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [png, json]
+          description: Response format (png for image, json for metadata)
+      responses:
+        '200':
+          description: Sprite image or JSON metadata
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                type: object
+
+  /fonts/{fontstack}/{start}-{end}.pbf:
+    get:
+      tags: [Styles]
+      summary: Get font glyphs
+      description: Returns font glyph data in Protocol Buffer format
+      parameters:
+        - name: fontstack
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Font stack name (comma-separated font names)
+          example: "Open Sans Regular,Arial Unicode MS Regular"
+        - name: start
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 65535
+          description: Start of Unicode range
+        - name: end
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 65535
+          description: End of Unicode range
+      responses:
+        '200':
+          description: Font glyph data in PBF format
+          content:
+            application/x-protobuf:
+              schema:
+                type: string
+                format: binary
+
+  /fonts.json:
+    get:
+      tags: [Metadata]
+      summary: List available fonts
+      description: Returns an array of available font names
+      responses:
+        '200':
+          description: Array of font names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: ["Open Sans Regular", "Arial Unicode MS Regular"]
+
+  /styles/{id}/{tileSize}/{z}/{x}/{y}@{ratio}.{format}:
+    get:
+      tags: [Rendered Tiles]
+      summary: Get rendered map tile
+      description: Returns a rendered map tile for the specified style and coordinates
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Style identifier
+        - name: tileSize
+          in: path
+          required: false
+          schema:
+            type: integer
+            enum: [256, 512]
+            default: 256
+          description: Tile size in pixels
+        - name: z
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 22
+          description: Zoom level
+        - name: x
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: Tile X coordinate
+        - name: y
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: Tile Y coordinate
+        - name: ratio
+          in: path
+          required: false
+          schema:
+            type: string
+            enum: ["1x", "2x", "3x", "4x"]
+            default: "1x"
+          description: Pixel ratio for HiDPI displays
+        - name: format
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [png, jpg, jpeg, webp]
+          description: Image format
+      responses:
+        '200':
+          description: Rendered tile image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+
+  /styles/{tileSize}/{id}.json:
+    get:
+      tags: [Rendered Tiles]
+      summary: Get TileJSON for rendered tiles
+      description: Returns TileJSON metadata for rendered tiles
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Style identifier
+        - name: tileSize
+          in: path
+          required: false
+          schema:
+            type: integer
+            enum: [256, 512]
+            default: 256
+          description: Tile size in pixels
+      responses:
+        '200':
+          description: TileJSON specification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TileJSON'
+
+  /styles/{id}/wmts.xml:
+    get:
+      tags: [Rendered Tiles]
+      summary: Get WMTS capabilities
+      description: Returns WMTS capabilities XML for the style
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Style identifier
+      responses:
+        '200':
+          description: WMTS capabilities XML
+          content:
+            application/xml:
+              schema:
+                type: string
+
+  /styles/{id}/static/{lon},{lat},{zoom}@{bearing},{pitch}/{width}x{height}@{ratio}.{format}:
+    get:
+      tags: [Static Images]
+      summary: Generate center-based static map
+      description: Generate a static map image centered on specific coordinates
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Style identifier
+        - name: lon
+          in: path
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: -180
+            maximum: 180
+          description: Longitude of center point
+        - name: lat
+          in: path
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: -85
+            maximum: 85
+          description: Latitude of center point
+        - name: zoom
+          in: path
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: 0
+            maximum: 22
+          description: Zoom level
+        - name: bearing
+          in: path
+          required: false
+          schema:
+            type: number
+            format: float
+            minimum: 0
+            maximum: 360
+            default: 0
+          description: Map bearing in degrees
+        - name: pitch
+          in: path
+          required: false
+          schema:
+            type: number
+            format: float
+            minimum: 0
+            maximum: 60
+            default: 0
+          description: Map pitch in degrees
+        - name: width
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2048
+          description: Image width in pixels
+        - name: height
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2048
+          description: Image height in pixels
+        - name: ratio
+          in: path
+          required: false
+          schema:
+            type: string
+            enum: ["1x", "2x", "3x", "4x"]
+            default: "1x"
+          description: Pixel ratio for HiDPI displays
+        - name: format
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [png, jpg, jpeg, webp]
+          description: Image format
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Path overlay in format: (fill|stroke|width):value|coordinates
+            Examples:
+            - stroke:red|width:2|5.9,45.8|5.9,47.8|10.5,47.8
+            - enc:_p~iF~ps|U_ulLnnqC_mqNvxq`@ (Google Polyline)
+        - name: marker
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Marker in format: lng,lat|iconPath|option|option
+            Example: 5.9,45.8|marker-icon.png|scale:0.5|offset:2,-4
+        - name: latlng
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Use lat,lng order instead of lng,lat for coordinates
+        - name: fill
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Default fill color for paths
+        - name: stroke
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Default stroke color for paths
+        - name: width
+          in: query
+          required: false
+          schema:
+            type: number
+          description: Default stroke width for paths
+        - name: padding
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+            maximum: 1
+          description: Padding percentage for fitted endpoints
+      responses:
+        '200':
+          description: Static map image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+
+  /styles/{id}/static/{minx},{miny},{maxx},{maxy}/{width}x{height}@{ratio}.{format}:
+    get:
+      tags: [Static Images]
+      summary: Generate area-based static map
+      description: Generate a static map image covering a specific bounding box
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Style identifier
+        - name: minx
+          in: path
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: -180
+            maximum: 180
+          description: Minimum longitude (west)
+        - name: miny
+          in: path
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: -85
+            maximum: 85
+          description: Minimum latitude (south)
+        - name: maxx
+          in: path
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: -180
+            maximum: 180
+          description: Maximum longitude (east)
+        - name: maxy
+          in: path
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: -85
+            maximum: 85
+          description: Maximum latitude (north)
+        - name: width
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2048
+          description: Image width in pixels
+        - name: height
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2048
+          description: Image height in pixels
+        - name: ratio
+          in: path
+          required: false
+          schema:
+            type: string
+            enum: ["1x", "2x", "3x", "4x"]
+            default: "1x"
+          description: Pixel ratio for HiDPI displays
+        - name: format
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [png, jpg, jpeg, webp]
+          description: Image format
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Path overlay (same format as center-based endpoint)
+        - name: marker
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Marker overlay (same format as center-based endpoint)
+        - name: padding
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+            maximum: 1
+          description: Padding percentage
+      responses:
+        '200':
+          description: Static map image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+
+  /styles/{id}/static/auto/{width}x{height}@{ratio}.{format}:
+    get:
+      tags: [Static Images]
+      summary: Generate auto-fitted static map
+      description: Generate a static map image that automatically fits the provided path
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Style identifier
+        - name: width
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2048
+          description: Image width in pixels
+        - name: height
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2048
+          description: Image height in pixels
+        - name: ratio
+          in: path
+          required: false
+          schema:
+            type: string
+            enum: ["1x", "2x", "3x", "4x"]
+            default: "1x"
+          description: Pixel ratio for HiDPI displays
+        - name: format
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [png, jpg, jpeg, webp]
+          description: Image format
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Path to auto-fit (required for this endpoint)
+        - name: marker
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Marker overlay
+        - name: padding
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+            maximum: 1
+          description: Padding percentage
+        - name: maxzoom
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+            maximum: 22
+          description: Maximum zoom level for auto-fit
+      responses:
+        '200':
+          description: Auto-fitted static map image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+
+  /data/{id}/{z}/{x}/{y}.{format}:
+    get:
+      tags: [Source Data]
+      summary: Get source data tile
+      description: Returns raw tile data from the source
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Data source identifier
+        - name: z
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 22
+          description: Zoom level
+        - name: x
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: Tile X coordinate
+        - name: y
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: Tile Y coordinate
+        - name: format
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [pbf, png, jpg, jpeg, geojson]
+          description: |
+            Data format:
+            - pbf: Vector tiles (Protocol Buffer)
+            - png/jpg: Raster tiles
+            - geojson: Vector data as GeoJSON (for inspection)
+      responses:
+        '200':
+          description: Raw tile data
+          content:
+            application/x-protobuf:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            application/geo+json:
+              schema:
+                $ref: '#/components/schemas/GeoJSON'
+
+  /data/{id}.json:
+    get:
+      tags: [Source Data]
+      summary: Get TileJSON for source data
+      description: Returns TileJSON metadata for the source data
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Data source identifier
+      responses:
+        '200':
+          description: TileJSON specification for source data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TileJSON'
+
+  /data/{id}/elevation/{z}/{x}/{y}:
+    get:
+      tags: [Source Data]
+      summary: Get elevation data for tile
+      description: Returns elevation data for a specific tile (requires terrain data with encoding configured)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Terrain data source identifier
+        - name: z
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 22
+          description: Zoom level
+        - name: x
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: Tile X coordinate
+        - name: y
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: Tile Y coordinate
+      responses:
+        '200':
+          description: Elevation data for tile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElevationResponse'
+
+  /data/{id}/elevation/{z}/{lon}/{lat}:
+    get:
+      tags: [Source Data]
+      summary: Get elevation data for coordinate
+      description: Returns elevation data for a specific coordinate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Terrain data source identifier
+        - name: z
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 22
+          description: Zoom level
+        - name: lon
+          in: path
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: -180
+            maximum: 180
+          description: Longitude
+        - name: lat
+          in: path
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: -85
+            maximum: 85
+          description: Latitude
+      responses:
+        '200':
+          description: Elevation data for coordinate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElevationResponse'
+
+  /files/{filename}:
+    get:
+      tags: [Static Files]
+      summary: Serve static file
+      description: Serves static files from the configured directory
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Filename to serve
+          example: data.geojson
+      responses:
+        '200':
+          description: Static file content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/geo+json:
+              schema:
+                $ref: '#/components/schemas/GeoJSON'
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: File not found
+
+  /{tileSize}/index.json:
+    get:
+      tags: [Metadata]
+      summary: List all TileJSONs
+      description: Returns an array of all available TileJSON objects
+      parameters:
+        - name: tileSize
+          in: path
+          required: false
+          schema:
+            type: integer
+            enum: [256, 512]
+            default: 256
+          description: Tile size filter
+      responses:
+        '200':
+          description: Array of TileJSON objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TileJSON'
+
+  /{tileSize}/rendered.json:
+    get:
+      tags: [Metadata]
+      summary: List rendered TileJSONs
+      description: Returns an array of TileJSON objects for rendered tiles only
+      parameters:
+        - name: tileSize
+          in: path
+          required: false
+          schema:
+            type: integer
+            enum: [256, 512]
+            default: 256
+          description: Tile size filter
+      responses:
+        '200':
+          description: Array of rendered TileJSON objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TileJSON'
+
+  /data.json:
+    get:
+      tags: [Metadata]
+      summary: List data source TileJSONs
+      description: Returns an array of TileJSON objects for data sources only
+      responses:
+        '200':
+          description: Array of data TileJSON objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TileJSON'
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns the health status of the server
+      responses:
+        '200':
+          description: Server is healthy and ready
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: OK
+        '503':
+          description: Server is starting up
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Starting
+
+components:
+  schemas:
+    StyleInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Style identifier
+        name:
+          type: string
+          description: Human-readable style name
+        description:
+          type: string
+          description: Style description
+      example:
+        id: basic
+        name: Basic Style
+        description: A simple basic map style
+
+    StyleJSON:
+      type: object
+      description: Mapbox GL JS Style Specification
+      properties:
+        version:
+          type: integer
+          example: 8
+        name:
+          type: string
+        sources:
+          type: object
+        layers:
+          type: array
+          items:
+            type: object
+        sprite:
+          type: string
+        glyphs:
+          type: string
+
+    TileJSON:
+      type: object
+      description: TileJSON 3.0.0 Specification
+      properties:
+        tilejson:
+          type: string
+          example: "3.0.0"
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        attribution:
+          type: string
+        template:
+          type: string
+        legend:
+          type: string
+        scheme:
+          type: string
+          enum: [xyz, tms]
+          default: xyz
+        tiles:
+          type: array
+          items:
+            type: string
+          description: Array of tile URL templates
+        grids:
+          type: array
+          items:
+            type: string
+        data:
+          type: array
+          items:
+            type: string
+        minzoom:
+          type: integer
+          minimum: 0
+          maximum: 30
+          default: 0
+        maxzoom:
+          type: integer
+          minimum: 0
+          maximum: 30
+          default: 22
+        bounds:
+          type: array
+          items:
+            type: number
+          minItems: 4
+          maxItems: 4
+          description: "[west, south, east, north]"
+        center:
+          type: array
+          items:
+            type: number
+          minItems: 2
+          maxItems: 3
+          description: "[longitude, latitude, zoom]"
+
+    GeoJSON:
+      type: object
+      description: GeoJSON object
+      properties:
+        type:
+          type: string
+          enum: [Feature, FeatureCollection, Point, LineString, Polygon, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection]
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeoJSONFeature'
+        geometry:
+          $ref: '#/components/schemas/GeoJSONGeometry'
+        properties:
+          type: object
+        coordinates:
+          type: array
+
+    GeoJSONFeature:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [Feature]
+        geometry:
+          $ref: '#/components/schemas/GeoJSONGeometry'
+        properties:
+          type: object
+
+    GeoJSONGeometry:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [Point, LineString, Polygon, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection]
+        coordinates:
+          type: array
+
+    ElevationResponse:
+      type: object
+      description: Elevation query response
+      properties:
+        z:
+          type: integer
+          description: Zoom level
+        x:
+          type: integer
+          description: Tile X coordinate
+        y:
+          type: integer
+          description: Tile Y coordinate
+        red:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Red color component
+        green:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Green color component
+        blue:
+          type: integer
+          minimum: 0
+          maximum: 255
+          description: Blue color component
+        latitude:
+          type: number
+          format: double
+          description: Latitude of the point
+        longitude:
+          type: number
+          format: double
+          description: Longitude of the point
+        elevation:
+          type: number
+          format: double
+          description: Elevation in meters
+      example:
+        z: 7
+        x: 68
+        y: 45
+        red: 134
+        green: 66
+        blue: 0
+        latitude: 11.84069
+        longitude: 46.04798
+        elevation: 1602
+
+  responses:
+    NotFound:
+      description: The requested resource was not found
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: Not Found
+
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: Bad Request
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: Internal Server Error

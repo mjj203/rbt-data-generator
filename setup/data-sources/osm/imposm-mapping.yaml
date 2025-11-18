@@ -1,0 +1,1894 @@
+tags:
+  load_all: true
+
+def_aeroway_polygon_mapping: &aeroway_polygon_mapping
+  - runway
+  - taxiway
+  - apron
+  - runway
+  - taxilane
+  - taxiway
+  - tower
+  - highway_strip
+  - spaceport
+  - launch_complex
+  - launchpad
+  - landingpad
+  - airstrip
+  - stopway
+  - holding_position
+  - parking_position
+
+areas:
+  area_tags:
+    - building
+    - landuse
+    - leisure
+    - natural
+    - aeroway
+    - landcover
+    - landform
+    - wetland
+    - crop
+    - water
+    - boundary
+    - place
+  linear_tags:
+    - highway
+    - railway
+    - waterway
+
+
+name_field: &name
+  name: name
+  key: name
+  type: string
+name_en_field: &name_en
+  name: name_en
+  key: name:en
+  type: string
+name_de_field: &name_de
+  name: name_de
+  key: name:de
+  type: string
+short_name_field: &short_name
+  key: short_name
+  name: short_name
+  type: string
+tunnel_field: &tunnel
+  key: tunnel
+  name: is_tunnel
+  type: bool
+bridge_field: &bridge
+  key: bridge
+  name: is_bridge
+  type: bool
+ramp_field: &ramp
+  key: ramp
+  name: is_ramp
+  type: bool
+ford_field: &ford
+  key: ford
+  name: is_ford
+  type: bool
+oneway_field: &oneway
+  key: oneway
+  name: is_oneway
+  type: direction
+area_field: &area
+  name: is_area
+  key: area
+  type: bool
+service_field: &service
+  key: service
+  name: service
+  type: string
+usage_field: &usage
+  key: usage
+  name: usage
+  type: string
+public_transport_field: &public_transport
+  key: public_transport
+  name: public_transport
+  type: string
+ref_field: &ref
+  key: ref
+  name: ref
+  type: string
+network_field: &network
+  key: network
+  name: network
+  type: string
+layer_field: &layer
+  key: layer
+  name: layer
+  type: integer
+level_field: &level
+  key: level
+  name: level
+  type: integer
+man_made_field: &man_made
+  key: man_made
+  name: man_made
+  type: string
+z_order_field: &z_order
+  name: z_order
+  type: wayzorder
+surface_field: &surface
+  key: surface
+  name: surface
+  type: string
+lane_field: &lane
+  key: lane
+  name: lane
+  type: string
+track_ref_field: &track_ref
+  key: railway:track_ref
+  name: track_ref
+  type: string
+electrified_field: &electrified
+  key: electrified
+  name: electrified
+  type: string
+tracks_field: &tracks
+  key: tracks
+  name: tracks
+  type: string
+gauge_field: &gauge
+  key: gauge
+  name: gauge
+  type: string
+voltage_field: &voltage
+  key: voltage
+  name: voltage
+  type: string
+frequency_field: &frequency
+  key: frequency
+  name: frequency
+  type: string
+content_field: &content
+  key: content
+  name: content
+  type: string
+type_field: &type
+  key: type
+  name: type
+  type: string
+height_field: &height
+  key: height
+  name: height
+  type: string
+ele_field: &ele
+  key: ele
+  name: ele
+  type: string
+access_field: &access
+  key: access
+  name: access
+  type: string
+military_field: &military
+  key: military
+  name: military
+  type: string
+radar_field: &radar
+  key: radar
+  name: radar
+  type: string
+description_field: &description
+  key: description
+  name: description
+  type: string
+religion_field: &religion
+  key: religion
+  name: religion
+  type: string
+denomination_field: &denomination
+  key: denomination
+  name: denomination
+  type: string
+cemetery_field: &cemetery
+  key: cemetery
+  name: cemetery
+  type: string
+industrial_field: &industrial
+  key: industrial
+  name: industrial
+  type: string
+port_field: &port
+  key: port
+  name: port
+  type: string
+cargo_field: &cargo
+  key: cargo
+  name: cargo
+  type: string
+port_type_field: &port_type
+  key: port:type
+  name: port_type
+  type: string
+lock_field: &lock
+  key: lock
+  name: lock
+  type: string
+gate_category_field: &gate_category
+  key: seamark:gate:category
+  name: gate_category
+  type: string
+lock_name_field: &lock_name
+  key: lock_name
+  name: lock_name
+  type: string
+aerodrome_type_field: &aerodrome_type
+  key: aerodrome:type
+  name: aerodrome_type
+  type: string
+wires_field: &wires
+  key: wires
+  name: wires
+  type: string
+pipeline_overhead_category_field: &pipeline_overhead_category
+  key: seamark:pipeline_overhead:category
+  name: pipeline_overhead_category
+  type: string
+pipeline_overhead_product_field: &pipeline_overhead_product
+  key: seamark:pipeline_overhead:product
+  name: pipeline_overhead_product
+  type: string
+cable_submarine_category_field: &cable_submarine_category
+  key: seamark:cable_submarine:category
+  name: cable_submarine_category
+  type: string
+product_field: &product
+  key: product
+  name: product
+  type: string
+operational_status_field: &operational_status
+  key: operational_status
+  name: operational_status
+  type: string
+condition_field: &condition
+  key: condition
+  name: condition
+  type: string
+bridge_name_field: &bridge_name
+  key: bridge:name
+  name: bridge_name
+  type: string
+tunnel_name_field: &tunnel_name
+  key: tunnel:name
+  name: tunnel_name
+  type: string
+yard_size_field: &yard_size
+  key: railway:yard:size
+  name: yard_size
+  type: string
+yard_purpose_field: &yard_purpose
+  key: railway:yard:purpose
+  name: yard_purpose
+  type: string
+wetland_field: &wetland
+  key: wetland
+  name: wetland
+  type: string
+lifecycle_desc_field: &lifecycle_desc
+  key: construction
+  name: lifecycle_desc
+  type: string
+lifecycle_type_field: &lifecycle_type
+  key: proposed
+  name: lifecycle_type
+  type: string
+damage_event_field: &damage_event
+  key: damage:event
+  name: damage_event
+  type: string
+damage_type_field: &damage_type
+  key: damage:type
+  name: damage_type
+  type: string
+removed_field: &removed
+  key: removed
+  name: removed
+  type: string
+planned_field: &planned
+  key: planned
+  name: planned
+  type: string
+razed_field: &razed
+  key: razed
+  name: razed
+  type: string
+abandoned_field: &abandoned
+  key: abandoned
+  name: abandoned
+  type: string
+demolished_field: &demolished
+  key: demolished
+  name: demolished
+  type: string
+disused_field: &disused
+  key: disused
+  name: disused
+  type: string
+destroyed_field: &destroyed
+  key: destroyed
+  name: destroyed
+  type: string
+proposed_field: &proposed
+  key: proposed
+  name: proposed
+  type: string
+construction_field: &construction
+  key: construction
+  name: construction
+  type: string
+ruins_field: &ruins
+  key: ruins
+  name: ruins
+  type: string
+rank_field: &rank
+  name: rank
+  key: rank
+  type: integer
+
+tables:
+
+  aeroway_polygon:
+    type: polygon
+    columns:
+    - *ref
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: subclass
+      type: mapping_value
+    - name: class
+      type: mapping_key
+    - name: icao
+      key: icao
+      type: string
+    - name: iata
+      key: iata
+      type: string
+    - name: surface
+      key: surface
+      type: string
+    - name: width
+      key: width
+      type: string
+    - name: ele
+      key: ele
+      type: string
+    - name: length
+      key: length
+      type: string
+    - name: military
+      key: military
+      type: string
+    - name: name
+      key: name
+      type: string
+    - *name_en
+    - *aerodrome_type
+    - name: operator
+      key: operator
+      type: string
+    - name: amenity
+      key: amenity
+      type: string
+    - name: area
+      type: area
+    - name: tags
+      type: hstore_tags
+    mapping:
+      aeroway: *aeroway_polygon_mapping
+      "area:aeroway": *aeroway_polygon_mapping
+
+  aeroway_linestring:
+    type: linestring
+    columns:
+    - *ref
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: subclass
+      type: mapping_value
+    - name: class
+      type: mapping_key
+    - name: icao
+      key: icao
+      type: string
+    - name: iata
+      key: iata
+      type: string
+    - name: surface
+      key: surface
+      type: string
+    - name: width
+      key: width
+      type: string
+    - name: ele
+      key: ele
+      type: string
+    - name: length
+      key: length
+      type: string
+    - name: military
+      key: military
+      type: string
+    - name: name
+      key: name
+      type: string
+    - name: operator
+      key: operator
+      type: string
+    - name: amenity
+      key: amenity
+      type: string
+    - name: tags
+      type: hstore_tags
+    mapping:
+      aeroway:
+      - runway
+      - taxiway
+      - holding_position
+      - parking_position
+      - taxilane
+      - highway_strip
+
+  aerodrome_label_point:
+    type: geometry
+    columns:
+    - *ref
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: name
+      key: name
+      type: string
+    - name: name_en
+      key: name:en
+      type: string
+    - name: tags
+      type: hstore_tags
+    - name: aerodrome_type
+      key: aerodrome:type
+      type: string
+    - name: aerodrome
+      key: aerodrome
+      type: string
+    - name: military
+      key: military
+      type: string
+    - name: iata
+      key: iata
+      type: string
+    - name: icao
+      key: icao
+      type: string
+    - name: ele
+      key: ele
+      type: string
+    - name: operator
+      key: operator
+      type: string
+    - name: amenity
+      key: amenity
+      type: string
+    - name: length
+      key: length
+      type: string
+    - name: surface
+      key: surface
+      type: string
+    - name: width
+      key: width
+      type: string
+    - name: subclass
+      type: mapping_value
+    - name: class
+      type: mapping_key
+    - name: area
+      type: area
+    type_mappings:
+      points:
+        aeroway:
+        - aerodrome
+        - heliport
+        - helipad
+        - airstrip
+        - airfield
+        - spaceport
+        military:
+        - airfield
+      polygons:
+        aeroway:
+        - aerodrome
+        - heliport
+        - helipad
+        - airstrip
+        - airfield
+        - spaceport
+        military:
+        - airfield
+        aeroway:suborbital:
+        - spaceport
+  
+  barrier:
+    type: linestring
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: subclass
+      type: mapping_value
+    - name: class
+      type: mapping_key
+    - name: tags
+      type: hstore_tags
+    - name: access
+      key: access
+      type: string
+    - name: maxwidth
+      key: maxwidth
+      type: string
+    - name: width
+      key: width
+      type: string
+    - name: maxheight
+      key: maxheight
+      type: string
+    - name: height
+      key: height
+      type: string
+    - name: operator
+      key: operator
+      type: string
+    - name: material
+      key: material
+      type: string
+    mapping:
+      barrier:
+      - __any__
+
+  barrier_label:
+    type: point
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: subclass
+      type: mapping_value
+    - name: class
+      type: mapping_key
+    - name: tags
+      type: hstore_tags
+    - name: access
+      key: access
+      type: string
+    - name: maxwidth
+      key: maxwidth
+      type: string
+    - name: width
+      key: width
+      type: string
+    - name: maxheight
+      key: maxheight
+      type: string
+    - name: height
+      key: height
+      type: string
+    - name: operator
+      key: operator
+      type: string
+    - name: material
+      key: material
+      type: string
+    mapping:
+      barrier:
+      - __any__
+
+  waterway:
+    type: linestring
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - key: name
+      name: name
+      type: string
+    - name: waterway
+      key: waterway
+      type: string
+    - name: name_en
+      key: name:en
+      type: string
+    - key: tunnel
+      name: tunnel
+      type: bool
+    - key: bridge
+      name: bridge
+      type: bool
+    - name: intermittent
+      key: intermittent
+      type: bool
+    - *lock
+    - *lock_name
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - name: tags
+      type: hstore_tags
+    mapping:
+      waterway:
+      - __any__
+      water:
+      - __any__
+
+  waterway_relation:
+    type: relation_member
+    columns:
+    - name: osm_id
+      type: id
+    - name: member
+      type: member_id
+    - name: role
+      type: member_role 
+    - name: geometry
+      type: geometry
+    - key: waterway
+      name: waterway
+      type: string
+    - key: name
+      name: name
+      type: string
+    - name: tags
+      type: hstore_tags
+    mapping:
+      waterway:
+      - __any__
+      water:
+      - __any__
+
+  mountain_peak:
+    type: point
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: name
+      key: name
+      type: string
+    - name: name_en
+      key: name:en
+      type: string
+    - name: ele
+      key: ele
+      type: string
+    - name: subclass
+      type: mapping_value
+    - name: tags
+      type: hstore_tags
+    mapping:
+      natural:
+      - peak
+      - volcano
+      - saddle
+      - hill
+
+  mountain_label:
+    type: linestring
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: name
+      key: name
+      type: string
+    - name: name_en
+      key: name:en
+      type: string
+    - name: subclass
+      type: mapping_value
+    - name: tags
+      type: hstore_tags
+    filters:
+      require:
+        name:
+        - __any__
+    mapping:
+      natural:
+      - ridge
+      - cliff
+      - arete
+      - valley
+      - dune
+      - landform
+      landform:
+      - esker
+      - dune_system
+      - dune
+      geological:
+      - moraine
+      - outcrop
+      - volcanic_caldera_rim
+
+  water_label:
+    type: point
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: name
+      key: name
+      type: string
+    - name: name_en
+      key: name:en
+      type: string
+    - name: rank
+      key: rank
+      type: integer
+    - name: intermittent
+      key: intermittent
+      type: bool
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - name: tags
+      type: hstore_tags
+    filters:
+      require:
+        name:
+        - __any__
+    mapping:
+      place:
+      - ocean
+      - sea
+      natural:
+      - bay
+      - strait
+      - spring
+      - water
+      waterway:
+      - __any__
+      water:
+      - __any__
+      landuse:
+      - reservoir
+      - basin
+      - salt_pond
+
+  water:
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: validated_geometry
+    - *name
+    - *name_en
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - name: intermittent
+      key: intermittent
+      type: bool
+    - name: tags
+      type: hstore_tags
+    - name: area
+      type: area
+    filters:
+      reject:
+        covered: ["yes"]
+    mapping:
+      landuse:
+      - reservoir
+      - basin
+      - salt_pond
+      leisure:
+      - swimming_pool
+      natural:
+      - water
+      - bay
+      - spring
+      - strait
+      waterway:
+      - __any__
+      water:
+      - __any__
+      place:
+      - sea
+      - ocean
+    type: polygon
+
+  highway:
+    type: linestring
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - *lane
+    - *ref
+    - *network
+    - *name
+    - *name_en
+    - *tunnel
+    - *bridge
+    - *ramp
+    - *ford
+    - *bridge_name
+    - *tunnel_name
+    - *surface
+    - *service
+    - *oneway
+    - *construction
+    - *proposed
+    - *planned
+    - *destroyed
+    - *demolished
+    - *razed
+    - *removed
+    - *disused
+    - *abandoned
+    - *lifecycle_desc
+    - *lifecycle_type
+    - *damage_event
+    - *damage_type
+    - *layer
+    - name: tags
+      type: hstore_tags
+    mapping:
+      highway:
+      - motorway
+      - motorway_link
+      - trunk
+      - trunk_link
+      - primary
+      - primary_link
+      - secondary
+      - secondary_link
+      - tertiary
+      - tertiary_link
+      - unclassified
+      - residential
+      - living_street
+      - road
+      - pedestrian
+      - path
+      - footway
+      - steps
+      - cycleway
+      - bridleway
+      - service
+      - track
+      - raceway
+      - construction
+      - proposed
+      - planned
+      - destroyed
+      - demolished
+      - razed
+      - removed
+      - disused
+      - abandoned
+      route:
+      - road
+      route_master:
+      - road
+
+  transportation_stations:
+    type: polygon
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - name: platforms
+      key: platforms
+      type: string
+    - name: station
+      key: station
+      type: string
+    - name: operator
+      key: operator
+      type: string
+    - name: name
+      key: name
+      type: string
+    - *ref
+    - *usage
+    - *yard_size
+    - *yard_purpose
+    - name: z_order
+      type: wayzorder
+    - *layer
+    - *level
+    - *public_transport
+    - *man_made
+    - *service
+    - name: area
+      type: area
+    - name: tags
+      type: hstore_tags
+    mapping:
+      highway:
+      - platform
+      - rest_area
+      - services
+      railway:
+      - platform
+      - station
+      - yard
+      amenity:
+      - bus_station
+      - ferry_terminal
+      public_transport:
+      - platform
+      - station
+
+  transportation_label:
+    type: point
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - name: platforms
+      key: platforms
+      type: string
+    - name: station
+      key: station
+      type: string
+    - name: operator
+      key: operator
+      type: string
+    - name: name
+      key: name
+      type: string
+    - *ref
+    - *usage
+    - *yard_size
+    - *yard_purpose
+    - *layer
+    - *level
+    - *public_transport
+    - *man_made
+    - *service
+    - name: tags
+      type: hstore_tags
+    mapping:
+      highway:
+      - __any__
+      railway:
+      - __any__
+      amenity:
+      - bus_station
+      - ferry_terminal
+      public_transport:
+      - __any__
+
+  shipway_linestring:
+    type: linestring
+    _resolve_wikidata: false
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - key: route
+      name: shipway
+      type: string
+    - *z_order
+    - *layer
+    - *name
+    - *name_en
+    - name: tags
+      type: hstore_tags
+    - *short_name
+    - *tunnel
+    - *bridge
+    - *ramp
+    - *ford
+    - *oneway
+    - *area
+    - *service
+    - *usage
+    mapping:
+      route:
+      - ferry
+
+  railway:
+    type: linestring
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - *ref
+    - *network
+    - *name
+    - *name_en
+    - *short_name
+    - *tunnel
+    - *bridge
+    - *service
+    - *usage
+    - *track_ref
+    - *electrified
+    - *tracks
+    - *gauge
+    - *voltage
+    - *frequency
+    - *bridge_name
+    - *tunnel_name
+    - *construction
+    - *proposed
+    - *planned
+    - *destroyed
+    - *demolished
+    - *razed
+    - *removed
+    - *disused
+    - *abandoned
+    - *ruins
+    - *lifecycle_desc
+    - *lifecycle_type
+    - *damage_event
+    - *damage_type
+    - name: tags
+      type: hstore_tags
+    mapping:
+      railway:
+      - rail
+      - narrow_gauge
+      - preserved
+      - funicular
+      - subway
+      - light_rail
+      - monorail
+      - tram
+      - miniature
+      - platform
+      - public_transport
+      - construction
+      - proposed
+      - planned
+      - destroyed
+      - demolished
+      - razed
+      - removed
+      - abandoned
+      - disused
+      - ruins
+      route:
+      - railway
+      - tracks
+      - train
+      - light_rail
+      - subway
+      - tram
+      - monorail
+      - funicular
+      route_master:
+      - railway
+      - tracks
+      - train
+      - light_rail
+      - subway
+      - tram
+      - monorail
+      - funicular
+
+  park_polygon:
+    type: polygon
+    _resolve_wikidata: false
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: validated_geometry
+    - name: name
+      key: name
+      type: string
+    - name: name_en
+      key: name:en
+      type: string
+    - name: landuse
+      key: landuse
+      type: string
+    - name: leisure
+      key: leisure
+      type: string
+    - name: boundary
+      key: boundary
+      type: string
+    - name: surface
+      key: surface
+      type: string
+    - name: ownership
+      key: ownership
+      type: string
+    - name: owner
+      key: owner
+      type: string
+    - name: operator
+      key: operator
+      type: string
+    - name: access
+      key: access
+      type: string
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - name: protection_title
+      key: protection_title
+      type: string
+    - name: protect_class
+      key: protect_class
+      type: string
+    - name: iucn_level
+      key: iucn_level
+      type: string
+    - name: area
+      type: area
+    - name: tags
+      type: hstore_tags
+    mapping:
+      leisure:
+        - nature_reserve
+        - park
+        - golf_course
+        - dog_park
+        - recreation_ground
+        - garden
+      boundary:
+        - national_park
+        - protected_area
+        - aboriginal_lands
+      landuse:
+        - recreation_ground
+      park:type:
+      - __any__
+
+  utility_stations:
+    type: polygon
+    _resolve_wikidata: false
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - name: name
+      key: name
+      type: string
+    - name: name_en
+      key: name:en
+      type: string
+    - name: substation
+      key: substation
+      type: string
+    - name: pumping_station
+      key: pumping_station
+      type: string
+    - name: substance
+      key: substance
+      type: string
+    - name: operator
+      key: operator
+      type: string
+    - name: plant_source
+      key: plant:source
+      type: string
+    - name: plant_method
+      key: plant:method
+      type: string
+    - name: plant_storage
+      key: plant:storage
+      type: string
+    - name: plant_output
+      key: plant:output
+      type: string
+    - name: generator_source
+      key: generator:source
+      type: string
+    - name: generator_method
+      key: generator:method
+      type: string
+    - name: generator_type
+      key: generator:type
+      type: string
+    - name: generator_output
+      key: generator:output
+      type: string
+    - name: generator_plant
+      key: generator:plant
+      type: string
+    - name: area
+      type: area
+    - name: tags
+      type: hstore_tags
+    mapping:
+      power:
+      - __any__
+      pipeline:
+      - __any__
+      man_made:
+      - __any__
+      seamark:type:
+      - __any__
+      utility:
+      - __any__
+
+  utility_stations_label:
+    type: point
+    _resolve_wikidata: false
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - name: name
+      key: name
+      type: string
+    - name: name_en
+      key: name:en
+      type: string
+    - *lock
+    - *gate_category
+    - *military
+    - *ele
+    - *radar
+    - *description
+    - *content
+    - *type
+    - *height
+    - *access
+    - name: substation
+      key: substation
+      type: string
+    - name: pumping_station
+      key: pumping_station
+      type: string
+    - name: operator
+      key: operator
+      type: string
+    - name: plant_source
+      key: plant:source
+      type: string
+    - name: plant_method
+      key: plant:method
+      type: string
+    - name: plant_storage
+      key: plant:storage
+      type: string
+    - name: plant_output
+      key: plant:output
+      type: string
+    - name: generator_source
+      key: generator:source
+      type: string
+    - name: generator_method
+      key: generator:method
+      type: string
+    - name: generator_type
+      key: generator:type
+      type: string
+    - name: generator_plant
+      key: generator:plant
+      type: string
+    - name: seamark_pylon_category
+      key: seamark:pylon:category
+      type: string
+    - name: seamark_platform_category
+      key: seamark:platform:category
+      type: string
+    - name: seamark_production_area_category
+      key: seamark:production_area:category
+      type: string
+    - name: seamark_name
+      key: seamark:name
+      type: string
+    - name: seamark_platform_height
+      key: seamark:platform:height
+      type: string
+    - name: tower_type
+      key: tower:type
+      type: string
+    - name: tower_construction
+      key: tower:construction
+      type: string
+    - name: mast_type
+      key: mast:type
+      type: string
+    - name: rotor_diameter
+      key: rotor:diameter
+      type: string
+    - name: service
+      key: service
+      type: string
+    - name: substance
+      key: substance
+      type: string
+    - name: capacity
+      key: capacity
+      type: string
+    - name: location
+      key: location
+      type: string
+    - name: tags
+      type: hstore_tags
+    mapping:
+      power:
+      - __any__
+      pipeline:
+      - substation
+      man_made:
+      - __any__
+      seamark:type:
+      - __any__
+      utility:
+      - __any__
+      building:
+      - silo
+      - water_tower
+      - storage_tank
+
+  utility_linestrings:
+    type: linestring
+    _resolve_wikidata: false
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: name
+      key: name
+      type: string
+    - name: name_en
+      key: name:en
+      type: string
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - name: voltage
+      key: voltage
+      type: string
+    - name: cables
+      key: cables
+      type: string
+    - name: line
+      key: line
+      type: string
+    - name: ref
+      key: ref
+      type: string
+    - name: usage
+      key: usage
+      type: string
+    - name: pumping_station
+      key: pumping_station
+      type: string
+    - name: diameter
+      key: diameter
+      type: string
+    - name: flow_direction
+      key: flow_direction
+      type: string
+    - name: substance
+      key: substance
+      type: string
+    - name: operator
+      key: operator
+      type: string
+    - name: location
+      key: location
+      type: string
+    - name: cable_overhead_category
+      key: seamark:cable_overhead:category
+      type: string
+    - name: pipeline_submarine_product
+      key: seamark:pipeline_submarine:product
+      type: string
+    - name: pipeline_submarine_category
+      key: seamark:pipeline_submarine:category
+      type: string
+    - *cable_submarine_category
+    - *wires
+    - *pipeline_overhead_category
+    - *pipeline_overhead_product
+    - *product
+    - *content
+    - *height
+    - *ele
+    - *operational_status
+    - *condition
+    - name: area
+      type: area
+    - name: tags
+      type: hstore_tags
+    mapping:
+      power:
+        - __any__
+      pipeline:
+        - __any__
+      man_made:
+        - __any__
+      communication:
+        - __any__
+      seamark:type:
+        - __any__
+
+  builtup_area:
+    type: polygon
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: area
+      type: area
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - name: name
+      key: name
+      type: string
+    - *industrial
+    - *port
+    - *cargo
+    - *access
+    - *port_type
+    - *religion
+    - *denomination
+    - *cemetery
+    - name: tags
+      type: hstore_tags
+    mapping:
+      landuse:
+        - railway
+        - cemetery
+        - religious
+        - military
+        - quarry
+        - brownfield
+        - depot
+        - port
+        - greenfield
+        - residential
+        - commercial
+        - industrial
+        - garages
+        - retail
+        - construction
+        - education
+        - fairground
+        - institutional
+        - civic_admin
+        - landfill
+      memorial:
+        - graveyard
+      amenity:
+        - bus_station
+        - place_of_worship
+        - school
+        - university
+        - kindergarten
+        - college
+        - library
+        - hospital
+        - clinic
+        - fuel 
+        - ferry_terminal
+        - grave_yard
+        - police
+        - fire_station
+        - post_office
+        - townhall
+        - embassy
+        - consulate
+        - prison
+        - courthouse
+        - crematorium
+      tourism:
+        - theme_park
+        - zoo
+      leisure:
+        - stadium
+        - pitch
+        - playground
+        - track
+        - sports_centre
+      place:
+        - suburb
+        - quarter
+        - neighbourhood
+        - city
+        - borough
+        - city_block
+        - plot
+        - town
+        - village
+        - hamlet
+        - isolated_dwelling
+        - farm
+        - allotments
+
+  poi:
+    type: point
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: class
+      type: mapping_key
+    - name: subclass
+      type: mapping_value
+    - name: name
+      key: name
+      type: string
+    - name: tags
+      type: hstore_tags
+    mapping:
+      amenity:
+      - __any__
+      tourism:
+      - __any__
+      leisure:
+      - __any__
+      sport:
+      - __any__
+      shop:
+      - __any__
+      office:
+      - __any__
+      landuse:
+      - __any__
+      historic:
+      - __any__
+      building:
+      - __any__
+      boundary:
+      - __any__
+
+  continent_point:
+    type: point
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - *name
+    - *name_en
+    - *name_de
+    - name: tags
+      type: hstore_tags
+    filters:
+      require:
+        name: ["__any__"]
+    mapping:
+      place:
+      - continent
+
+  # etldoc: imposm3 -> osm_country_point
+  country_point:
+    type: point
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - *name
+    - *name_en
+    - *name_de
+    - *rank
+    - name: country_code_iso3166_1_alpha_2
+      key: country_code_iso3166_1_alpha_2
+      type: string
+    - name: iso3166_1_alpha_2
+      key: ISO3166-1:alpha2
+      type: string
+    - name: iso3166_1
+      key: ISO3166-1
+      type: string
+    - name: tags
+      type: hstore_tags
+    filters:
+      require:
+        name: ["__any__"]
+    mapping:
+      place:
+      - country
+
+  # etldoc: imposm3 -> osm_island_polygon
+  island_polygon:
+    type: polygon
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - name: area
+      type: area
+    - *name
+    - *name_en
+    - *name_de
+    - name: tags
+      type: hstore_tags
+    - *rank
+    filters:
+      require:
+        name: ["__any__"]
+    mapping:
+      place:
+      - island
+
+  # etldoc: imposm3 -> osm_island_point
+  island_point:
+    type: point
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - *name
+    - *name_en
+    - *name_de
+    - name: tags
+      type: hstore_tags
+    - *rank
+    filters:
+      require:
+        name: ["__any__"]
+    mapping:
+      place:
+      - island
+
+  # etldoc: imposm3 -> osm_state_point
+  state_point:
+    type: point
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - *name
+    - *name_en
+    - *name_de
+    - name: tags
+      type: hstore_tags
+    - name: place
+      key: place
+      type: string
+    - name: is_in_country
+      key: is_in:country
+      type: string
+    - name: is_in_country_code
+      key: is_in:country_code
+      type: string
+    - name: ref
+      key: ref
+      type: string
+    - *rank
+    filters:
+      require:
+        name: ["__any__"]
+    mapping:
+      place:
+      - state
+      - province
+
+  city_point:
+    type: point
+    columns:
+    - name: osm_id
+      type: id
+    - name: geometry
+      type: geometry
+    - *name
+    - *name_en
+    - *name_de
+    - name: tags
+      type: hstore_tags
+    - name: place
+      key: place
+      type: string
+    - key: population
+      name: population
+      type: integer
+    - key: capital
+      name: capital
+      type: string
+    - *rank
+    filters:
+      require:
+        name: ["__any__"]
+    mapping:
+      place:
+      - city
+      - town
+      - village
+      - hamlet
+      - borough
+      - suburb
+      - quarter
+      - neighbourhood
+      - isolated_dwelling
+      - locality
+      - square
+
+  landcover:
+    columns:
+      - name: osm_id
+        type: id
+      - name: geometry
+        type: validated_geometry
+      - name: area
+        type: area
+      - name: subclass
+        type: mapping_value
+      - name: class
+        type: mapping_key
+      - *name
+      - *name_en
+      - name: leaf_cycle
+        key: leaf_cycle
+        type: string
+      - name: leaf_type
+        key: leaf_type
+        type: string
+      - *wetland     
+      - name: intermittent
+        key: intermittent
+        type: bool
+      - name: seasonal
+        key: seasonal
+        type: bool
+      - name: tags
+        type: hstore_tags
+    mapping:
+      landuse:
+        - allotments
+        - farm
+        - farmland
+        - orchard
+        - vineyard
+        - grass
+        - grassland
+        - meadow
+        - plant_nursery
+        - paddy
+        - forest
+        - village_green
+        - recreation_ground
+        - wetland
+        - sand
+        - scree
+        - scrub
+        - tree
+        - heath
+        - bare_rock
+      natural:
+        - wood
+        - forest
+        - wetland
+        - fell
+        - grassland
+        - grass
+        - heath
+        - scrub
+        - shrubbery
+        - tundra
+        - bare_rock
+        - glacier
+        - blockfield
+        - shingle
+        - scree
+        - arete
+        - cliff
+        - earth_bank
+        - rock
+        - sinkhole
+        - beach
+        - sand
+        - dune
+        - reef
+        - shoal
+        - mud
+        - dry_lake
+        - moor
+        - tree
+        - tree_row
+        - marsh
+      landcover:
+        - trees
+        - wetland
+        - grass
+        - mostly_rock
+        - scrub
+        - fell
+        - shrubbery
+        - sand
+        - dry_swamp
+      crop:
+        - rice
+        - grass
+      landform:
+        - beach
+        - dune_system
+      wetland:
+        - bog
+        - fen
+        - dambo
+        - wet_meadow
+        - marsh
+        - reedbed
+        - saltern
+        - tidalflat
+        - saltmarsh
+        - mangrove
+        - mud
+        - swamp
+        - string_bog
+      geological:
+        - inselberg
+        - pingo
+        - limestone_pavement
+        - sinkhole
+        - cone
+        - tor
+        - monocline
+        - dyke
+        - meteor_crater
+        - rock_glacier
+        - glacial_erratic
+        - volcanic_vent
+        - volcanic_lava_field
+        - volcanic_caldera_rim
+        - moraine
+      boundary:
+        - forest
+    type: polygon
