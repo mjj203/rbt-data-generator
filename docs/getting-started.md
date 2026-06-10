@@ -61,8 +61,8 @@ brew install postgresql@17 postgis gdal imposm tippecanoe
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/rbt-vector-tiles.git
-cd rbt-vector-tiles
+git clone https://github.com/MJJ203/rbt-data-generator.git
+cd rbt-data-generator
 
 # Copy environment template (optional)
 cp env.example .env

@@ -15,10 +15,8 @@ info:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8081
     description: Local development server
-  - url: https://mapproxy-rbt-agc-dev.apps.kubic.dev.ngaxc.net/
-    description: Production server
 
 paths:
   # WMS Endpoints

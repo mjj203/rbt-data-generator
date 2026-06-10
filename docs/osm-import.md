@@ -105,7 +105,7 @@ imposm run -config config.json
 
 **Database Configuration**:
 
-- Host: 10.232.234.30
+- Host: value of `DATABASE_HOST` (e.g. `localhost`, or the `postgres` Compose service)
 - Database: rbt
 - SRID: 4326 (WGS84 coordinate system)
 - No table prefix (prefix=NONE)

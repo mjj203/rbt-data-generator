@@ -55,8 +55,6 @@ theme:
   font:
     text: Roboto
     code: Roboto Mono
-  logo: assets/agc-logo-transparent.png
-  favicon: assets/favicon.ico
 
 # Plugins
 plugins:
@@ -106,11 +104,9 @@ markdown_extensions:
 
 # Customization
 extra:
-  version:
-    provider: mike
   social:
     - icon: fontawesome/brands/github
-      link: https://gitlab.dso.xc.nga.mil/RBT/etl/vectortiles
+      link: https://github.com/MJJ203/rbt-data-generator
       name: GitHub Repository
   status:
     new: Recently added
