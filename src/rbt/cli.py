@@ -104,8 +104,13 @@ def _main(
     ),
 ) -> None:
     """Entry-point configuration (logging, settings)."""
-    log_level = "DEBUG" if debug else ("INFO" if verbose else "INFO")
     settings = load_settings()
+    if debug or settings.debug:
+        log_level = "DEBUG"
+    elif verbose or settings.verbose:
+        log_level = "INFO"
+    else:
+        log_level = settings.log_level
 
     resolved_log_file: Path | None
     if no_log_file:
@@ -134,7 +139,8 @@ def _is_read_only_invocation(ctx: typer.Context) -> bool:
 
 
 def _settings(ctx: typer.Context) -> Settings:
-    return ctx.obj["settings"]
+    settings: Settings = ctx.obj["settings"]
+    return settings
 
 
 def _projections_for(projection: Projection, registry: LayerRegistry) -> list[str]:
@@ -166,6 +172,11 @@ def tiles_entry(
     tile_join: bool = typer.Option(True, "--tile-join/--no-tile-join"),
     add_btis: bool = typer.Option(True, "--add-btis/--no-btis"),
     dry_run: bool = typer.Option(False, "--dry-run", "-d"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Re-export cached FlatGeoBuf files (use after a database refresh).",
+    ),
     # Cultural category flags
     aeroway: bool = typer.Option(False, "--aeroway"),
     boundary: bool = typer.Option(False, "--boundary"),
@@ -232,7 +243,7 @@ def tiles_entry(
         return
 
     registry = load_registry()
-    engine = TileEngine(settings=settings, registry=registry, dry_run=dry_run)
+    engine = TileEngine(settings=settings, registry=registry, dry_run=dry_run, force=force)
 
     if all_:
         layer_type = LayerType.all
@@ -294,6 +305,7 @@ def tiles_entry(
                 output_dir=output_dir,
                 tile_join=tile_join,
                 add_btis=add_btis,
+                categories=categories or None,
             )
             log.info(
                 "generating %d %s layer(s) for EPSG:%s → %s",
@@ -311,9 +323,10 @@ def tiles_layer_cmd(
     layer_key: str = typer.Argument(..., help="Layer key from config/layers.yml"),
     projection: Projection = typer.Option(Projection.p3857, "--projection"),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    force: bool = typer.Option(False, "--force", help="Re-export cached FlatGeoBuf files."),
 ) -> None:
     """Generate a single layer in a single projection."""
-    generate_layer(layer_key, projection.value, _settings(ctx), dry_run=dry_run)
+    generate_layer(layer_key, projection.value, _settings(ctx), dry_run=dry_run, force=force)
 
 
 def _build_bash_args(

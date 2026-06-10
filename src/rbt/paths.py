@@ -16,6 +16,10 @@ def project_root() -> Path:
     1. ``RBT_PROJECT_ROOT`` env var if set.
     2. Walk upward from this file looking for ``config/rbt.conf``.
     3. Fall back to two levels above the package (``src/rbt`` → repo root).
+
+    The result is cached for the lifetime of the process (``lru_cache``);
+    tests that change ``RBT_PROJECT_ROOT`` must call
+    ``project_root.cache_clear()`` (the shared ``fake_repo`` fixture does).
     """
     env = os.environ.get("RBT_PROJECT_ROOT")
     if env:

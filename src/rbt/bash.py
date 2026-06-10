@@ -37,8 +37,7 @@ def delegate(
     log_file: Path | None = None,
 ) -> None:
     script = _script_path(relative)
-    env = {**settings.libpq_env(), **settings.legacy_pg_env()}
-    env.setdefault("RBT_PROJECT_ROOT", str(settings.project_root))
+    env = settings.subprocess_env()
     run(
         ["bash", str(script), *list(args)],
         cwd=script.parent,

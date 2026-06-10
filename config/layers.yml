@@ -588,6 +588,152 @@ categories:
     waterway: [waterway]
     inland_water: [inland_water_intermittent]
 
+# =============================================================================
+# GDAL-MVT backend (EPSG:4326 only)
+# =============================================================================
+# The 4326 pipeline does NOT use tippecanoe: it drives GDAL's MVT driver
+# directly (`ogr2ogr -f MVT -dsco TILING_SCHEME="EPSG:4326,-180,180,360"`).
+# Each dataset is produced by a single multi-table ogr2ogr invocation whose
+# CONF json maps source tables to target MVT layers with per-table zoom
+# windows. Zoom-variant views (e.g. rbt.highway_z6) blend pre-simplified
+# geometry into one target layer.
+#
+# Ported from production/tile-generation/{physical,cultural}/generate-*-4326.sh.
+# Group keys deliberately match the `categories:` section above so the same
+# CLI flags (--water, --transportation, ...) select work in every projection.
+gdal_mvt:
+  tiling_scheme: "EPSG:4326,-180,180,360"
+  max_tile_size: 900000
+  max_features: 500000
+  datasets:
+    physical:
+      name: physical
+      description: Physical vector tiles dataset
+      groups:
+        builtuparea:
+          rbt.builtuparea_ne: {target: builtuparea, minzoom: 3, maxzoom: 8}
+          rbt.builtuparea_osm: {target: builtuparea, minzoom: 8, maxzoom: 13}
+        contour:
+          rbt.contour_z8: {target: contour, minzoom: 8, maxzoom: 13}
+          rbt.contour_z10: {target: contour, minzoom: 10, maxzoom: 13}
+          rbt.contour_z12: {target: contour, minzoom: 12, maxzoom: 13}
+          rbt.contour: {target: contour, minzoom: 13, maxzoom: 13}
+          rbt.contour_glacier_z8: {target: contour_glacier, minzoom: 8, maxzoom: 13}
+          rbt.contour_glacier_z10: {target: contour_glacier, minzoom: 10, maxzoom: 13}
+          rbt.contour_glacier_z12: {target: contour_glacier, minzoom: 12, maxzoom: 13}
+          rbt.contour_glacier: {target: contour_glacier, minzoom: 13, maxzoom: 13}
+        glacier:
+          rbt.glacier_ne: {target: glacier, minzoom: 0, maxzoom: 7}
+          rbt.glacier_osm: {target: glacier, minzoom: 7, maxzoom: 13}
+        landcover:
+          rbt.landcover_z4: {target: landcover, minzoom: 4, maxzoom: 13}
+          rbt.landcover_z6: {target: landcover, minzoom: 6, maxzoom: 13}
+          rbt.landcover_z9: {target: landcover, minzoom: 9, maxzoom: 13}
+          rbt.landcover_z10: {target: landcover, minzoom: 10, maxzoom: 13}
+          rbt.landcover: {target: landcover, minzoom: 12, maxzoom: 13}
+          rbt.landcover_labels_z4: {target: landcover_labels, minzoom: 4, maxzoom: 13}
+          rbt.landcover_labels_z6: {target: landcover_labels, minzoom: 6, maxzoom: 13}
+          rbt.landcover_labels_z9: {target: landcover_labels, minzoom: 9, maxzoom: 13}
+          rbt.landcover_labels_z10: {target: landcover_labels, minzoom: 10, maxzoom: 13}
+          rbt.landcover_labels: {target: landcover_labels, minzoom: 12, maxzoom: 13}
+        mountain:
+          rbt.mountain_label: {target: mountain_label, minzoom: 2, maxzoom: 13}
+        park:
+          rbt.park: {target: park, minzoom: 6, maxzoom: 13}
+        water:
+          rbt.water_simplified: {target: water, minzoom: 0, maxzoom: 9}
+          rbt.water: {target: water, minzoom: 10, maxzoom: 13}
+        water_label:
+          rbt.ne_water_label: {target: ne_water_label, minzoom: 0, maxzoom: 13}
+        waterway:
+          rbt.waterway: {target: waterway, minzoom: 5, maxzoom: 13}
+        inland_water:
+          rbt.inland_water_intermittent_dissolved:
+            {target: inland_water_intermittent, minzoom: 8, maxzoom: 13}
+    cultural:
+      name: cultural
+      description: Cultural vector tiles dataset
+      groups:
+        aeroway:
+          rbt.aeroway_surface: {target: aeroway_surface, minzoom: 8, maxzoom: 13}
+          rbt.airports: {target: airports, minzoom: 5, maxzoom: 13}
+          rbt.heliports: {target: heliports, minzoom: 5, maxzoom: 13}
+          rbt.runway_curve: {target: runway_curve, minzoom: 8, maxzoom: 13}
+        boundary:
+          rbt.adm0_labels: {target: adm0_labels, minzoom: 0, maxzoom: 13}
+          rbt.adm0_lines: {target: adm0_lines, minzoom: 0, maxzoom: 13}
+          rbt.adm1_labels: {target: adm1_labels, minzoom: 3, maxzoom: 13}
+          rbt.adm1_lines: {target: adm1_lines, minzoom: 3, maxzoom: 13}
+          rbt.adm2_labels: {target: adm2_labels, minzoom: 6, maxzoom: 13}
+          rbt.adm2_lines: {target: adm2_lines, minzoom: 6, maxzoom: 13}
+        building:
+          rbt.building_z10: {target: building, minzoom: 10, maxzoom: 13}
+          rbt.building_z11: {target: building, minzoom: 11, maxzoom: 13}
+          rbt.building_z12: {target: building, minzoom: 12, maxzoom: 13}
+          rbt.building: {target: building, minzoom: 13, maxzoom: 13}
+        cemetery:
+          rbt.cemetery: {target: cemetery, minzoom: 8, maxzoom: 13}
+          rbt.cemetery_label: {target: cemetery_label, minzoom: 8, maxzoom: 13}
+        geonames:
+          rbt.geonames_hydrographic_z2: {target: geonames_hydrographic, minzoom: 1, maxzoom: 2}
+          rbt.geonames_hydrographic_z3: {target: geonames_hydrographic, minzoom: 3, maxzoom: 3}
+          rbt.geonames_hydrographic_z4: {target: geonames_hydrographic, minzoom: 4, maxzoom: 4}
+          rbt.geonames_hydrographic_z5: {target: geonames_hydrographic, minzoom: 5, maxzoom: 5}
+          rbt.geonames_hydrographic_z6: {target: geonames_hydrographic, minzoom: 6, maxzoom: 6}
+          rbt.geonames_hydrographic_z7: {target: geonames_hydrographic, minzoom: 7, maxzoom: 7}
+          rbt.geonames_hydrographic_z8: {target: geonames_hydrographic, minzoom: 8, maxzoom: 8}
+          rbt.geonames_hydrographic_z9: {target: geonames_hydrographic, minzoom: 9, maxzoom: 9}
+          rbt.geonames_hydrographic_z10: {target: geonames_hydrographic, minzoom: 10, maxzoom: 10}
+          rbt.geonames_hydrographic: {target: geonames_hydrographic, minzoom: 11, maxzoom: 13}
+          rbt.populated_places_z3: {target: populated_places, minzoom: 3, maxzoom: 6}
+          rbt.populated_places_z7: {target: populated_places, minzoom: 7, maxzoom: 8}
+          rbt.populated_places_z9: {target: populated_places, minzoom: 9, maxzoom: 11}
+          rbt.populated_places: {target: populated_places, minzoom: 12, maxzoom: 13}
+        transportation:
+          rbt.ferry: {target: ferry, minzoom: 4, maxzoom: 13}
+          rbt.highway_z4: {target: highway, minzoom: 4, maxzoom: 13}
+          rbt.highway_z6: {target: highway, minzoom: 6, maxzoom: 13}
+          rbt.highway_z7: {target: highway, minzoom: 7, maxzoom: 13}
+          rbt.highway_z8: {target: highway, minzoom: 8, maxzoom: 13}
+          rbt.highway_z9: {target: highway, minzoom: 9, maxzoom: 13}
+          rbt.highway_z10: {target: highway, minzoom: 10, maxzoom: 13}
+          rbt.highway_z11: {target: highway, minzoom: 11, maxzoom: 13}
+          rbt.highway_z12: {target: highway, minzoom: 12, maxzoom: 13}
+          rbt.highway: {target: highway, minzoom: 13, maxzoom: 13}
+          rbt.lock_label: {target: lock_label, minzoom: 11, maxzoom: 13}
+          rbt.lock: {target: lock, minzoom: 11, maxzoom: 13}
+          rbt.port_label: {target: port_label, minzoom: 7, maxzoom: 13}
+          rbt.port_surface: {target: port_surface, minzoom: 7, maxzoom: 13}
+          rbt.railway_z6: {target: railway, minzoom: 6, maxzoom: 13}
+          rbt.railway: {target: railway, minzoom: 13, maxzoom: 13}
+          rbt.railway_station: {target: railway_station, minzoom: 9, maxzoom: 13}
+          rbt.railway_station_label: {target: railway_station_label, minzoom: 11, maxzoom: 13}
+          rbt.yard_label: {target: yard_label, minzoom: 11, maxzoom: 13}
+        utilities:
+          rbt.dam_curve: {target: dam_curve, minzoom: 7, maxzoom: 13}
+          rbt.dam_surface: {target: dam_surface, minzoom: 7, maxzoom: 13}
+          rbt.dam_label: {target: dam_label, minzoom: 7, maxzoom: 13}
+          rbt.grain_srf: {target: grain_elevator_srf, minzoom: 8, maxzoom: 13}
+          rbt.grain_srf_pnt: {target: grain_elevator, minzoom: 8, maxzoom: 13}
+          rbt.hydrocarbon_field: {target: hydrocarbon_field, minzoom: 8, maxzoom: 13}
+          rbt.hydrocarbon_label: {target: hydrocarbon_label, minzoom: 8, maxzoom: 13}
+          rbt.powerline: {target: powerline, minzoom: 9, maxzoom: 13}
+          rbt.pipeline: {target: pipeline, minzoom: 9, maxzoom: 13}
+          rbt.utility_point_z6: {target: utility_point, minzoom: 6, maxzoom: 13}
+          rbt.utility_point_z12: {target: utility_point, minzoom: 12, maxzoom: 13}
+          rbt.utility_point: {target: utility_point, minzoom: 13, maxzoom: 13}
+          rbt.power_station: {target: power_station, minzoom: 8, maxzoom: 13}
+          rbt.power_station_label: {target: power_station_label, minzoom: 9, maxzoom: 13}
+          rbt.pumping_station: {target: pumping_station, minzoom: 8, maxzoom: 13}
+          rbt.pumping_station_label: {target: pumping_station_label, minzoom: 9, maxzoom: 13}
+        other:
+          rbt.stadium_surface: {target: stadium_surface, minzoom: 7, maxzoom: 13}
+          rbt.stadium_labels: {target: stadium_labels, minzoom: 7, maxzoom: 13}
+          rbt.us_military_installations: {target: us_military_installations, minzoom: 4, maxzoom: 13}
+          rbt.us_military_installations_labels:
+            {target: us_military_installations_labels, minzoom: 6, maxzoom: 13}
+          rbt.radar_point: {target: radar_point, minzoom: 7, maxzoom: 13}
+
 # Projection metadata — referenced by both Bash and Python generators.
 projections:
   3857:

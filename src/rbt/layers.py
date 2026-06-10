@@ -58,6 +58,48 @@ class Layer:
 
 
 @dataclass(frozen=True, slots=True)
+class MvtSourceTable:
+    """One source table feeding the GDAL-MVT (EPSG:4326) backend.
+
+    Zoom-variant views (e.g. ``rbt.highway_z6``) map onto the same
+    ``target_name`` with different zoom windows, which is how the GDAL MVT
+    driver blends pre-simplified geometry per zoom range.
+    """
+
+    source_table: str
+    target_name: str
+    minzoom: int
+    maxzoom: int
+    description: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class MvtDataset:
+    """Per-layer-type dataset definition for the GDAL-MVT backend."""
+
+    name: str
+    description: str
+    groups: dict[str, tuple[MvtSourceTable, ...]]  # category -> tables
+
+    def tables_for(self, categories: list[str] | None = None) -> list[MvtSourceTable]:
+        selected = categories if categories else list(self.groups.keys())
+        tables: list[MvtSourceTable] = []
+        for category in selected:
+            tables.extend(self.groups.get(category, ()))
+        return tables
+
+
+@dataclass(frozen=True, slots=True)
+class MvtConfig:
+    """Settings for the EPSG:4326 GDAL-MVT tile backend."""
+
+    tiling_scheme: str
+    max_tile_size: int
+    max_features: int
+    datasets: dict[str, MvtDataset]  # layer_type -> dataset
+
+
+@dataclass(frozen=True, slots=True)
 class LayerRegistry:
     btp_schema_version: str
     defaults: dict[str, Any]
@@ -65,6 +107,7 @@ class LayerRegistry:
     projections: dict[str, Projection]
     layers: dict[str, Layer]
     categories: dict[str, dict[str, tuple[str, ...]]]
+    gdal_mvt: MvtConfig | None = None
 
     def layer(self, key: str) -> Layer:
         try:
@@ -123,7 +166,12 @@ def _build_layer(key: str, layer_type: str, raw: dict[str, Any]) -> Layer:
 
 @lru_cache(maxsize=1)
 def load_registry(path: Path | None = None) -> LayerRegistry:
-    """Parse ``config/layers.yml`` and return a :class:`LayerRegistry`."""
+    """Parse ``config/layers.yml`` and return a :class:`LayerRegistry`.
+
+    Cached for the lifetime of the process (``lru_cache``); tests pointing at
+    a different registry must call ``load_registry.cache_clear()`` (the shared
+    ``fake_repo`` fixture does).
+    """
     if path is None:
         path = config_dir() / "layers.yml"
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -161,12 +209,47 @@ def load_registry(path: Path | None = None) -> LayerRegistry:
         projections=projections,
         layers=layers,
         categories=categories,
+        gdal_mvt=_build_mvt_config(raw.get("gdal_mvt")),
+    )
+
+
+def _build_mvt_config(raw: dict[str, Any] | None) -> MvtConfig | None:
+    if not raw:
+        return None
+    datasets: dict[str, MvtDataset] = {}
+    for layer_type, ds_raw in (raw.get("datasets", {}) or {}).items():
+        groups: dict[str, tuple[MvtSourceTable, ...]] = {}
+        for category, tables_raw in (ds_raw.get("groups", {}) or {}).items():
+            tables = tuple(
+                MvtSourceTable(
+                    source_table=str(table),
+                    target_name=str(spec["target"]),
+                    minzoom=int(spec["minzoom"]),
+                    maxzoom=int(spec["maxzoom"]),
+                    description=str(spec.get("description", spec["target"])),
+                )
+                for table, spec in (tables_raw or {}).items()
+            )
+            groups[str(category)] = tables
+        datasets[str(layer_type)] = MvtDataset(
+            name=str(ds_raw.get("name", layer_type)),
+            description=str(ds_raw.get("description", f"{layer_type} vector tiles dataset")),
+            groups=groups,
+        )
+    return MvtConfig(
+        tiling_scheme=str(raw.get("tiling_scheme", "EPSG:4326,-180,180,360")),
+        max_tile_size=int(raw.get("max_tile_size", 900000)),
+        max_features=int(raw.get("max_features", 500000)),
+        datasets=datasets,
     )
 
 
 __all__ = [
     "Layer",
     "LayerRegistry",
+    "MvtConfig",
+    "MvtDataset",
+    "MvtSourceTable",
     "OgrOptions",
     "Projection",
     "TippecanoeOptions",

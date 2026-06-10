@@ -18,16 +18,30 @@ def export_layer_to_fgb(
     settings: Settings,
     output_dir: Path,
     *,
+    force: bool = False,
     dry_run: bool = False,
     log_file: Path | None = None,
 ) -> Path:
-    """Export a Postgres table/view to FlatGeoBuf in the target projection."""
+    """Export a Postgres table/view to FlatGeoBuf in the target projection.
+
+    An existing ``.fgb`` is reused unless *force* is set — note that a stale
+    export silently produces stale tiles after a schema refresh, so the skip
+    is logged as a warning.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     fgb = output_dir / f"{layer.output_basename(projection.code)}.fgb"
 
     if fgb.is_file():
-        log.info("ogr2ogr skipped — %s already exists", fgb.name)
-        return fgb
+        if force:
+            log.info("--force: re-exporting %s (removing cached %s)", layer.key, fgb.name)
+            fgb.unlink()
+        else:
+            log.warning(
+                "REUSING cached export %s — pass --force to re-export after a "
+                "database/schema refresh",
+                fgb.name,
+            )
+            return fgb
 
     cmd = ["ogr2ogr"]
     if not layer.ogr.spatial_index:

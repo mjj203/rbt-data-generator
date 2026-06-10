@@ -105,8 +105,32 @@ class Settings:
             env["PG_PASS"] = self.database_password
         return env
 
+    def database_env(self) -> dict[str, str]:
+        env = {
+            "DATABASE_HOST": self.database_host,
+            "DATABASE_PORT": str(self.database_port),
+            "DATABASE_NAME": self.database_name,
+            "DATABASE_USER": self.database_user,
+        }
+        if self.database_password:
+            env["DATABASE_PASSWORD"] = self.database_password
+        return env
 
-def _parse_conf_line(line: str) -> tuple[str, str] | None:
+    def subprocess_env(self) -> dict[str, str]:
+        """Environment for child processes (bash scripts, psql, ogr2ogr).
+
+        Combines libpq (``PG*``), legacy (``PG_*``), and ``DATABASE_*``
+        variables so every consumer sees the same resolved connection.
+        """
+        return {
+            **self.libpq_env(),
+            **self.legacy_pg_env(),
+            **self.database_env(),
+            "RBT_PROJECT_ROOT": str(self.project_root),
+        }
+
+
+def _parse_conf_line(line: str, env: dict[str, str]) -> tuple[str, str] | None:
     stripped = line.strip()
     if not stripped or stripped.startswith("#"):
         return None
@@ -120,42 +144,46 @@ def _parse_conf_line(line: str) -> tuple[str, str] | None:
     # Strip surrounding quotes
     if len(raw_value) >= 2 and raw_value[0] == raw_value[-1] and raw_value[0] in ("'", '"'):
         raw_value = raw_value[1:-1]
-    return key, _expand_shell_vars(raw_value)
+    return key, _expand_shell_vars(raw_value, env)
 
 
-def _expand_shell_vars(value: str) -> str:
-    """Evaluate ``${VAR}``, ``${VAR:-default}``, ``${VAR:=default}`` expressions."""
+def _expand_shell_vars(value: str, env: dict[str, str]) -> str:
+    """Evaluate ``${VAR}``, ``${VAR:-default}``, ``${VAR:=default}`` expressions.
+
+    Lookups and ``:=`` assignments operate on *env* (a local mapping), never on
+    ``os.environ`` — parsing a config file must not mutate process state.
+    """
 
     def resolve(match: re.Match[str]) -> str:
         inner = match.group(1)
         if ":-" in inner:
             name, default = inner.split(":-", 1)
-            return os.environ.get(name) or _expand_shell_vars(default)
+            return env.get(name) or _expand_shell_vars(default, env)
         if ":=" in inner:
             name, default = inner.split(":=", 1)
-            existing = os.environ.get(name)
+            existing = env.get(name)
             if existing is not None and existing != "":
                 return existing
-            expanded = _expand_shell_vars(default)
-            os.environ[name] = expanded
+            expanded = _expand_shell_vars(default, env)
+            env[name] = expanded
             return expanded
-        return os.environ.get(inner, "")
+        return env.get(inner, "")
 
     return re.sub(r"\$\{([^}]+)\}", resolve, value)
 
 
-def _read_conf(path: Path) -> dict[str, str]:
+def _read_conf(path: Path, env: dict[str, str]) -> dict[str, str]:
     if not path.is_file():
         return {}
     values: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
-        parsed = _parse_conf_line(line)
+        parsed = _parse_conf_line(line, env)
         if parsed is None:
             continue
         key, value = parsed
         values[key] = value
         # Make the value visible to subsequent ${...} expansions in the same file.
-        os.environ.setdefault(key, value)
+        env.setdefault(key, value)
     return values
 
 
@@ -179,24 +207,26 @@ def _coerce_int(value: str | int | None, default: int) -> int:
 
 
 def load_settings(overrides: dict[str, str] | None = None) -> Settings:
-    """Build a :class:`Settings` instance from env + config file + overrides."""
+    """Build a :class:`Settings` instance from overrides + env + config file.
+
+    Precedence (highest first): *overrides* → process environment →
+    ``config/rbt.conf`` → built-in defaults. Loading settings never mutates
+    ``os.environ``; values destined for child processes are passed explicitly
+    (see :meth:`Settings.subprocess_env`).
+    """
     root = project_root()
     conf_path = root / "config" / "rbt.conf"
-    conf = _read_conf(conf_path)
+    overrides = dict(overrides or {})
+    expansion_env = {**os.environ, **overrides}
+    conf = _read_conf(conf_path, expansion_env)
 
     def resolve(*keys: str, default: str = "") -> str:
         for key in keys:
-            env_value = os.environ.get(key)
-            if env_value not in (None, ""):
-                return env_value
-            conf_value = conf.get(key)
-            if conf_value not in (None, ""):
-                return conf_value
+            for source in (overrides, os.environ, conf):
+                value = source.get(key)
+                if value:
+                    return value
         return default
-
-    overrides = overrides or {}
-    for key, value in overrides.items():
-        os.environ[key] = value
 
     settings = Settings(
         database_host=resolve("DATABASE_HOST", "PG_HOST", default="localhost"),
@@ -220,18 +250,6 @@ def load_settings(overrides: dict[str, str] | None = None) -> Settings:
         shared_log_dir=Path(resolve("SHARED_LOG_DIR", default=str(root / "output" / "logs"))),
         shared_temp_dir=Path(resolve("SHARED_TEMP_DIR", default=str(root / "output" / "temp"))),
     )
-
-    # Export resolved values so shelled-out bash scripts inherit them.
-    for key, value in settings.libpq_env().items():
-        os.environ.setdefault(key, value)
-    for key, value in settings.legacy_pg_env().items():
-        os.environ.setdefault(key, value)
-    os.environ.setdefault("DATABASE_HOST", settings.database_host)
-    os.environ.setdefault("DATABASE_PORT", str(settings.database_port))
-    os.environ.setdefault("DATABASE_NAME", settings.database_name)
-    os.environ.setdefault("DATABASE_USER", settings.database_user)
-    if settings.database_password:
-        os.environ.setdefault("DATABASE_PASSWORD", settings.database_password)
 
     return settings
 

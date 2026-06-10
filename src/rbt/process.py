@@ -53,7 +53,7 @@ def run(
         with log_file.open("ab") as handle:
             handle.write(f"\n--- $ {rendered}\n".encode())
             handle.flush()
-            completed = subprocess.run(  # noqa: S603 - caller-supplied commands
+            teed = subprocess.run(  # noqa: S603 - caller-supplied commands
                 cmd,
                 cwd=str(cwd) if cwd is not None else None,
                 env=merged_env,
@@ -61,11 +61,11 @@ def run(
                 stderr=subprocess.STDOUT,
                 check=False,
             )
-        if check and completed.returncode != 0:
-            raise CommandFailed(cmd, completed.returncode)
-        return subprocess.CompletedProcess(cmd, completed.returncode, "", "")
+        if check and teed.returncode != 0:
+            raise CommandFailed(cmd, teed.returncode)
+        return subprocess.CompletedProcess(cmd, teed.returncode, "", "")
 
-    completed = subprocess.run(  # noqa: S603 - caller-supplied commands
+    completed: subprocess.CompletedProcess[str] = subprocess.run(  # noqa: S603
         cmd,
         cwd=str(cwd) if cwd is not None else None,
         env=merged_env,
