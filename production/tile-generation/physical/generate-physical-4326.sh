@@ -592,7 +592,7 @@ generate_mvt_tiles() {
     # If DIAGNOSTIC mode is enabled, test each table individually
     if [[ "${DIAGNOSTIC:-0}" == "1" ]]; then
         log "DIAGNOSTIC MODE: Testing each table individually..."
-        local all_tables="${SELECTED_TABLES[@]}"
+        local all_tables="${SELECTED_TABLES[*]}"
         IFS=',' read -ra TABLE_ARRAY <<< "$all_tables"
         
         for table in "${TABLE_ARRAY[@]}"; do
@@ -640,7 +640,7 @@ generate_mvt_tiles() {
         "$DB_CONNECTION" \
         -oo ACTIVE_SCHEMA=rbt \
         -oo SCHEMAS=rbt \
-        -oo TABLES="${SELECTED_TABLES[@]}" \
+        -oo TABLES="${SELECTED_TABLES[*]}" \
         -dsco NAME="$DATASET_NAME" \
         -dsco DESCRIPTION="$DATASET_DESCRIPTION" \
         -dsco FORMAT=DIRECTORY \
@@ -664,11 +664,11 @@ generate_mvt_tiles() {
         log ""
         log "Troubleshooting suggestions:"
         log "1. Run with DIAGNOSTIC=1 to test each table individually:"
-        log "   DIAGNOSTIC=1 $0 ${SELECTED_LAYERS[@]/#/--}"
+        log "   DIAGNOSTIC=1 $0 ${SELECTED_LAYERS[*]/#/--}"
         log "2. Check if the database views exist and contain valid data:"
         log "   psql -h \$PG_HOST -U \$PG_USR -d rbt -c \"\\dv rbt.*\""
         log "3. Run with DEBUG=1 to see the generated JSON configuration:"
-        log "   DEBUG=1 $0 ${SELECTED_LAYERS[@]/#/--}"
+        log "   DEBUG=1 $0 ${SELECTED_LAYERS[*]/#/--}"
         
         exit $exit_code
     fi
@@ -682,10 +682,10 @@ generate_metadata() {
     local category_items=""
     
     # Terrain category
-    if [[ " ${SELECTED_LAYERS[@]} " =~ " contour " ]] || [[ " ${SELECTED_LAYERS[@]} " =~ " mountain " ]]; then
+    if [[ " ${SELECTED_LAYERS[*]} " =~ " contour " ]] || [[ " ${SELECTED_LAYERS[*]} " =~ " mountain " ]]; then
         category_items=""
-        [[ " ${SELECTED_LAYERS[@]} " =~ " contour " ]] && category_items="\"contour\", \"contour_glacier\""
-        [[ " ${SELECTED_LAYERS[@]} " =~ " mountain " ]] && {
+        [[ " ${SELECTED_LAYERS[*]} " =~ " contour " ]] && category_items="\"contour\", \"contour_glacier\""
+        [[ " ${SELECTED_LAYERS[*]} " =~ " mountain " ]] && {
             [[ -n "$category_items" ]] && category_items="${category_items}, "
             category_items="${category_items}\"mountain_label\""
         }
@@ -693,25 +693,25 @@ generate_metadata() {
     fi
     
     # Hydrology category
-    if [[ " ${SELECTED_LAYERS[@]} " =~ " water " ]]; then
+    if [[ " ${SELECTED_LAYERS[*]} " =~ " water " ]]; then
         categories_json="${categories_json}        \"hydrology\": [\"water\", \"waterway\", \"inland_water_intermittent\", \"ne_water_label\"],\n"
     fi
     
     # Land Surface category
     category_items=""
-    [[ " ${SELECTED_LAYERS[@]} " =~ " landcover " ]] && category_items="\"landcover\", \"landcover_labels\""
-    [[ " ${SELECTED_LAYERS[@]} " =~ " glacier " ]] && {
+    [[ " ${SELECTED_LAYERS[*]} " =~ " landcover " ]] && category_items="\"landcover\", \"landcover_labels\""
+    [[ " ${SELECTED_LAYERS[*]} " =~ " glacier " ]] && {
         [[ -n "$category_items" ]] && category_items="${category_items}, "
         category_items="${category_items}\"glacier\""
     }
-    [[ " ${SELECTED_LAYERS[@]} " =~ " builtuparea " ]] && {
+    [[ " ${SELECTED_LAYERS[*]} " =~ " builtuparea " ]] && {
         [[ -n "$category_items" ]] && category_items="${category_items}, "
         category_items="${category_items}\"builtuparea\""
     }
     [[ -n "$category_items" ]] && categories_json="${categories_json}        \"land_surface\": [${category_items}],\n"
     
     # Recreation category
-    if [[ " ${SELECTED_LAYERS[@]} " =~ " park " ]]; then
+    if [[ " ${SELECTED_LAYERS[*]} " =~ " park " ]]; then
         categories_json="${categories_json}        \"recreation\": [\"park\"],\n"
     fi
     

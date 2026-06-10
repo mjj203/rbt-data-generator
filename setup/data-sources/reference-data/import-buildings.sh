@@ -141,7 +141,7 @@ show_progress() {
     
     printf "\r${CYAN}[PROGRESS]${NC} %s [" "$message"
     printf "%*s" $filled | tr ' ' '='
-    printf "%*s" $((bar_length - filled)) | tr ' ' '-'
+    printf "%*s" $((bar_length - filled)) "" | tr ' ' '-'
     printf "] %d%% (%d/%d)" $percentage $current $total
     
     if [ $current -eq $total ]; then

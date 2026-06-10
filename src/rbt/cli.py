@@ -407,6 +407,12 @@ def setup_entry(
     import_geonames: bool = typer.Option(False, "--import-geonames"),
     import_buildings: bool = typer.Option(False, "--import-buildings"),
     process_schemas: bool = typer.Option(False, "--process-schemas"),
+    osm_arg: list[str] = typer.Option(
+        None,
+        "--osm-arg",
+        help="Stage flag passed through to the OSM import script "
+        "(repeatable, use the = form: --osm-arg=--import). Defaults to --all.",
+    ),
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
     """One-time database initialization (bootstrap, imports, schemas)."""
@@ -433,7 +439,9 @@ def setup_entry(
             import_buildings=import_buildings,
             process_schemas=process_schemas,
         )
-    setup_db.run_setup(_settings(ctx), load_registry(), steps, dry_run=dry_run)
+    setup_db.run_setup(
+        _settings(ctx), load_registry(), steps, osm_args=list(osm_arg or []), dry_run=dry_run
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -591,6 +599,11 @@ def smoke(ctx: typer.Context) -> None:
 def health(ctx: typer.Context) -> None:
     """Fast liveness probe used by the Docker HEALTHCHECK."""
     raise typer.Exit(checks.health(_settings(ctx)))
+
+
+# Click object exposed for the docs build (mkdocs-click renders docs/cli.md
+# from this at every `mkdocs build`, so the CLI reference can never drift).
+click_app = typer.main.get_command(app)
 
 
 def main() -> None:  # pragma: no cover - CLI entry

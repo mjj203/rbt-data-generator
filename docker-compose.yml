@@ -85,6 +85,9 @@ services:
       - rbt-network
     restart: unless-stopped
     command: ["rbt", "osm", "run"]
+    # The supervisor gives imposm 30s after SIGTERM before SIGKILL; compose's
+    # default 10s would kill the container mid-shutdown.
+    stop_grace_period: 35s
     profiles:
       - production
 

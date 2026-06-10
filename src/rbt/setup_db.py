@@ -98,12 +98,16 @@ def run_setup(
     osm_args: list[str] | None = None,
     dry_run: bool = False,
 ) -> None:
-    """Run the selected initialization steps in dependency order."""
+    """Run the selected initialization steps in dependency order.
+
+    *osm_args* is passed through to the OSM leaf script, which requires a
+    stage flag; when none are given the full workflow (``--all``) runs.
+    """
     if steps.bootstrap:
         bootstrap(settings, dry_run=dry_run)
     if steps.import_osm:
         log.info("importing OSM data (this may take several hours)")
-        osm_importer.import_osm(settings, list(osm_args or []), dry_run=dry_run)
+        osm_importer.import_osm(settings, list(osm_args or ["--all"]), dry_run=dry_run)
     if steps.import_reference:
         log.info("importing reference datasets")
         reference_importer.import_reference(settings, [], dry_run=dry_run)

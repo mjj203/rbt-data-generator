@@ -18,8 +18,12 @@ def join_layers(
     dry_run: bool = False,
     log_file: Path | None = None,
 ) -> Path:
-    """Run ``tile-join -f -pk`` into *output*."""
-    mbtiles_list = [p for p in mbtiles if p.is_file()]
+    """Run ``tile-join -f -pk`` into *output*.
+
+    In a dry run the per-layer MBTiles were never written, so the existence
+    filter is skipped and the would-be command is printed instead.
+    """
+    mbtiles_list = [p for p in mbtiles if dry_run or p.is_file()]
     if not mbtiles_list:
         raise ValueError("No MBTiles files provided to tile-join")
 

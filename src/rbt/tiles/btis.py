@@ -6,6 +6,7 @@ This helper does it in a single transaction.
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 from pathlib import Path
 
@@ -32,7 +33,8 @@ def apply_btis_metadata(
         mbtiles.name,
     )
 
-    with sqlite3.connect(mbtiles) as conn:
+    # contextlib.closing: sqlite3's context manager commits but never closes.
+    with contextlib.closing(sqlite3.connect(mbtiles)) as conn:
         conn.execute("BEGIN TRANSACTION")
         for name, value in (
             ("crs", projection.epsg),

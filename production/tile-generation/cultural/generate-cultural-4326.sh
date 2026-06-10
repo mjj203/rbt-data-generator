@@ -918,7 +918,7 @@ generate_mvt_tiles() {
     # If DIAGNOSTIC mode is enabled, test each table individually
     if [[ "${DIAGNOSTIC:-0}" == "1" ]]; then
         log "DIAGNOSTIC MODE: Testing each table individually..."
-        local all_tables="${SELECTED_TABLES[@]}"
+        local all_tables="${SELECTED_TABLES[*]}"
         IFS=',' read -ra TABLE_ARRAY <<< "$all_tables"
         
         for table in "${TABLE_ARRAY[@]}"; do
@@ -966,7 +966,7 @@ generate_mvt_tiles() {
         "$DB_CONNECTION" \
         -oo ACTIVE_SCHEMA=rbt \
         -oo SCHEMAS=rbt \
-        -oo TABLES="${SELECTED_TABLES[@]}" \
+        -oo TABLES="${SELECTED_TABLES[*]}" \
         -dsco NAME="$DATASET_NAME" \
         -dsco DESCRIPTION="$DATASET_DESCRIPTION" \
         -dsco FORMAT=DIRECTORY \
@@ -990,11 +990,11 @@ generate_mvt_tiles() {
         log ""
         log "Troubleshooting suggestions:"
         log "1. Run with DIAGNOSTIC=1 to test each table individually:"
-        log "   DIAGNOSTIC=1 $0 ${SELECTED_LAYERS[@]/#/--}"
+        log "   DIAGNOSTIC=1 $0 ${SELECTED_LAYERS[*]/#/--}"
         log "2. Check if the database views exist and contain valid data:"
         log "   psql -h \$PG_HOST -U \$PG_USR -d rbt -c \"\\dv rbt.*\""
         log "3. Run with DEBUG=1 to see the generated JSON configuration:"
-        log "   DEBUG=1 $0 ${SELECTED_LAYERS[@]/#/--}"
+        log "   DEBUG=1 $0 ${SELECTED_LAYERS[*]/#/--}"
         
         exit $exit_code
     fi
@@ -1007,17 +1007,17 @@ generate_metadata() {
     local categories_json=""
     
     # Cultural layer categories
-    [[ " ${SELECTED_LAYERS[@]} " =~ " aeroway " ]] && categories_json="${categories_json}        \"aviation\": [\"aeroway_surface\", \"airports\", \"heliports\", \"runway_curve\"],\n"
-    [[ " ${SELECTED_LAYERS[@]} " =~ " boundary " ]] && categories_json="${categories_json}        \"administrative\": [\"adm0_labels\", \"adm0_lines\", \"adm1_labels\", \"adm1_lines\", \"adm2_labels\", \"adm2_lines\"],\n"
-    [[ " ${SELECTED_LAYERS[@]} " =~ " building " ]] && categories_json="${categories_json}        \"structures\": [\"building\"],\n"
-    [[ " ${SELECTED_LAYERS[@]} " =~ " cemetery " ]] && categories_json="${categories_json}        \"memorial\": [\"cemetery\", \"cemetery_label\"],\n"
-    [[ " ${SELECTED_LAYERS[@]} " =~ " geonames " ]] && categories_json="${categories_json}        \"place_names\": [\"geonames_hydrographic\"],\n"
-    [[ " ${SELECTED_LAYERS[@]} " =~ " populated " ]] && categories_json="${categories_json}        \"settlements\": [\"populated_places\"],\n"
-    [[ " ${SELECTED_LAYERS[@]} " =~ " landuse " ]] && categories_json="${categories_json}        \"recreation\": [\"stadium_surface\", \"stadium_labels\"],\n"
-    [[ " ${SELECTED_LAYERS[@]} " =~ " military " ]] && categories_json="${categories_json}        \"defense\": [\"us_military_installations\", \"us_military_installations_labels\"],\n"
-    [[ " ${SELECTED_LAYERS[@]} " =~ " radar " ]] && categories_json="${categories_json}        \"surveillance\": [\"radar_point\"],\n"
-    [[ " ${SELECTED_LAYERS[@]} " =~ " transportation " ]] && categories_json="${categories_json}        \"transport\": [\"ferry\", \"highway\", \"lock\", \"lock_label\", \"port_label\", \"port_surface\", \"railway\", \"railway_station\", \"railway_station_label\", \"yard_label\"],\n"
-    [[ " ${SELECTED_LAYERS[@]} " =~ " utilities " ]] && categories_json="${categories_json}        \"infrastructure\": [\"dam_curve\", \"dam_surface\", \"dam_label\", \"grain_elevator_srf\", \"grain_elevator\", \"hydrocarbon_field\", \"hydrocarbon_label\", \"powerline\", \"pipeline\", \"utility_point\", \"power_station\", \"power_station_label\", \"pumping_station\", \"pumping_station_label\"],\n"
+    [[ " ${SELECTED_LAYERS[*]} " =~ " aeroway " ]] && categories_json="${categories_json}        \"aviation\": [\"aeroway_surface\", \"airports\", \"heliports\", \"runway_curve\"],\n"
+    [[ " ${SELECTED_LAYERS[*]} " =~ " boundary " ]] && categories_json="${categories_json}        \"administrative\": [\"adm0_labels\", \"adm0_lines\", \"adm1_labels\", \"adm1_lines\", \"adm2_labels\", \"adm2_lines\"],\n"
+    [[ " ${SELECTED_LAYERS[*]} " =~ " building " ]] && categories_json="${categories_json}        \"structures\": [\"building\"],\n"
+    [[ " ${SELECTED_LAYERS[*]} " =~ " cemetery " ]] && categories_json="${categories_json}        \"memorial\": [\"cemetery\", \"cemetery_label\"],\n"
+    [[ " ${SELECTED_LAYERS[*]} " =~ " geonames " ]] && categories_json="${categories_json}        \"place_names\": [\"geonames_hydrographic\"],\n"
+    [[ " ${SELECTED_LAYERS[*]} " =~ " populated " ]] && categories_json="${categories_json}        \"settlements\": [\"populated_places\"],\n"
+    [[ " ${SELECTED_LAYERS[*]} " =~ " landuse " ]] && categories_json="${categories_json}        \"recreation\": [\"stadium_surface\", \"stadium_labels\"],\n"
+    [[ " ${SELECTED_LAYERS[*]} " =~ " military " ]] && categories_json="${categories_json}        \"defense\": [\"us_military_installations\", \"us_military_installations_labels\"],\n"
+    [[ " ${SELECTED_LAYERS[*]} " =~ " radar " ]] && categories_json="${categories_json}        \"surveillance\": [\"radar_point\"],\n"
+    [[ " ${SELECTED_LAYERS[*]} " =~ " transportation " ]] && categories_json="${categories_json}        \"transport\": [\"ferry\", \"highway\", \"lock\", \"lock_label\", \"port_label\", \"port_surface\", \"railway\", \"railway_station\", \"railway_station_label\", \"yard_label\"],\n"
+    [[ " ${SELECTED_LAYERS[*]} " =~ " utilities " ]] && categories_json="${categories_json}        \"infrastructure\": [\"dam_curve\", \"dam_surface\", \"dam_label\", \"grain_elevator_srf\", \"grain_elevator\", \"hydrocarbon_field\", \"hydrocarbon_label\", \"powerline\", \"pipeline\", \"utility_point\", \"power_station\", \"power_station_label\", \"pumping_station\", \"pumping_station_label\"],\n"
     
     # Remove trailing comma and newline
     categories_json=$(echo -e "$categories_json" | sed '$ s/,$//')

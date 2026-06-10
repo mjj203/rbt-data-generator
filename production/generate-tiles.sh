@@ -229,6 +229,7 @@ parse_arguments() {
                 shift 2
                 ;;
             --verbose|-v)
+                # shellcheck disable=SC2034  # accepted for CLI compatibility
                 VERBOSE=true
                 shift
                 ;;

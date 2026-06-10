@@ -58,6 +58,10 @@ readonly DIFF_START_SEQ="${DIFF_START_SEQ:-713}"
 readonly DIFF_END_SEQ="${DIFF_END_SEQ:-730}"
 readonly CLEANUP_ON_EXIT="${CLEANUP_ON_EXIT:-true}"
 readonly VALIDATE_DOWNLOADS="${VALIDATE_DOWNLOADS:-true}"
+# Minimum acceptable PBF size in MB for the import-stage sanity check. The
+# default admits regional extracts; raise it (e.g. 50000) to also catch
+# truncated planet downloads.
+readonly MIN_PBF_SIZE_MB="${OSM_MIN_PBF_SIZE_MB:-10}"
 
 # Global variables
 PID_FILE="/tmp/osm_import.pid"
@@ -230,7 +234,7 @@ download_planet_file() {
     
     # Check if file already exists and is valid
     local planet_file="$DATA_DIR/planet-latest-v2.osm.pbf"
-    if [[ -f "$planet_file" ]] && validate_file "$planet_file" 50000; then
+    if [[ -f "$planet_file" ]] && validate_file "$planet_file" "$MIN_PBF_SIZE_MB"; then
         log_info "Planet file already exists and is valid, skipping download"
         return 0
     fi
@@ -420,7 +424,7 @@ import_data() {
     
     cd "$DATA_DIR" || error_exit 5 "Cannot change to data directory"
     
-    validate_file "planet.osm.pbf" 50000 || error_exit 12 "Planet file not found for import"
+    validate_file "planet.osm.pbf" "$MIN_PBF_SIZE_MB" || error_exit 12 "Planet file not found for import"
     
     local imposm_args=(
         import
@@ -549,6 +553,9 @@ show_usage() {
     echo "  LOG_FILE          Log file path (default: ../logs/osm_import.log)"
     echo "  MAX_RETRIES       Maximum retry attempts (default: 3)"
     echo "  CLEANUP_ON_EXIT   Clean up temporary files on exit (default: true)"
+    echo "  OSM_MIN_PBF_SIZE_MB"
+    echo "                    Minimum PBF size in MB accepted by the import-stage"
+    echo "                    size check (default: 10; admits regional extracts)"
     echo "  DIFF_START_SEQ    Default start sequence for diffs (default: 713)"
     echo "  DIFF_END_SEQ      Default end sequence for diffs (default: 730)"
     echo ""

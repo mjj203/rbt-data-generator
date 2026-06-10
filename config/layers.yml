@@ -510,7 +510,7 @@ physical:
 
   ne_water_labels:
     category: water_label
-    source_table: rbt.ne_water_labels
+    source_table: rbt.ne_water_label
     projections: [3857, 3395]
     min_zoom: 0
     tippecanoe:
@@ -614,19 +614,21 @@ schemas:
   cultural:
     type: cultural
     sql: setup/data-sources/schemas/cultural/cultural-core.sql
-    description: Core cultural views (aeroway, buildings, boundaries, places)
+    description: >-
+      Core cultural views (boundaries, buildings, places, cemeteries, ports,
+      utilities, military)
   highway:
     type: cultural
     sql: setup/data-sources/schemas/cultural/transportation.sql
-    description: Roads, ferries, and ports
+    description: Road network views (highway zoom variants)
   railway:
     type: cultural
     sql: setup/data-sources/schemas/cultural/transportation-railway.sql
-    description: Railways and stations
+    description: Railways, stations, and yard labels
   aero:
     type: cultural
     sql: setup/data-sources/schemas/cultural/infrastructure.sql
-    description: Utility and infrastructure views (dams, powerlines, pipelines)
+    description: Aviation views (airports, heliports, runways, aeroway surfaces)
 
 # =============================================================================
 # GDAL-MVT backend (EPSG:4326 only)
