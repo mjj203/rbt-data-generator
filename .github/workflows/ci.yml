@@ -5,6 +5,17 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  # GitHub Actions sets GITHUB_ACTIONS=true, which makes Typer/Rich force
+  # terminal-style rendering even though stdout is a captured pipe. That
+  # wraps option names like `--all` in bold/dim ANSI attribute codes (not
+  # just color), splitting the literal substring and breaking tests that
+  # assert on CLI output. NO_COLOR alone doesn't fully suppress this because
+  # bold/dim are text attributes, not colors; _TYPER_FORCE_DISABLE_TERMINAL
+  # is Typer's own escape hatch for disabling the forced-terminal detection.
+  NO_COLOR: "1"
+  _TYPER_FORCE_DISABLE_TERMINAL: "1"
+
 jobs:
   shell-lint:
     runs-on: ubuntu-latest
