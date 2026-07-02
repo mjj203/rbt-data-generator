@@ -201,7 +201,11 @@ jobs:
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Set up Python CLI
-        run: ~/.local/bin/uv sync
+        # The GDAL micromamba env's bin dir was just prepended to PATH, and
+        # its `python` is a 3.14 freethreaded build with no psycopg-binary
+        # wheel available. Pin to a standard (non-freethreaded) 3.13 so uv
+        # provisions its own interpreter instead of picking that one up.
+        run: ~/.local/bin/uv sync --python 3.13
       - name: Dry-run validation (rbt CLI)
         run: |
           ~/.local/bin/uv run rbt --no-log-file tiles --layer-type physical --projection 3857 --water --dry-run
@@ -277,7 +281,11 @@ jobs:
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Set up Python CLI
-        run: ~/.local/bin/uv sync
+        # The GDAL micromamba env's bin dir was just prepended to PATH, and
+        # its `python` is a 3.14 freethreaded build with no psycopg-binary
+        # wheel available. Pin to a standard (non-freethreaded) 3.13 so uv
+        # provisions its own interpreter instead of picking that one up.
+        run: ~/.local/bin/uv sync --python 3.13
       - name: Seed water + building fixture data
         run: |
           psql "host=localhost port=5432 dbname=rbt user=rbt_user password=rbt_password" \
