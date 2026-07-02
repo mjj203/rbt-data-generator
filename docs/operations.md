@@ -20,7 +20,7 @@ whichever profile you activate.
 ```mermaid
 graph TB
     subgraph base["always (dependency)"]
-        PG[("postgres<br/>postgis/postgis:17-3.5<br/>127.0.0.1:5432")]
+        PG[("postgres<br/>postgis/postgis:18-3.6<br/>127.0.0.1:5432")]
     end
 
     subgraph setup["--profile setup"]
@@ -60,7 +60,7 @@ graph TB
 
 | Service | Profile | Command | Ports (localhost only) | Storage |
 |---|---|---|---|---|
-| `postgres` | *(none — auto-started)* | PostGIS 17-3.5 | `127.0.0.1:5432` | `postgres_data` volume, `config/postgresql.conf` mounted read-only |
+| `postgres` | *(none — auto-started)* | PostGIS 18-3.6 | `127.0.0.1:5432` | `postgres_data` volume, `config/postgresql.conf` mounted read-only |
 | `rbt-setup` | `setup` | `rbt setup --all` | — | `./output` bind, `setup_cache` volume |
 | `rbt-osm-updates` | `production` | `rbt osm run` | — | `./output` bind, `osm_cache` volume |
 | `rbt-tiles` | `production` | `rbt tiles --all` (image default) | — | `./output` bind (`TILE_CACHE_DIR=/app/output/tiles`) |

@@ -31,7 +31,7 @@ The Python `rbt` CLI orchestrates everything. The four `rbt import` subcommands 
 ## Prerequisites
 
 - **Docker and Docker Compose** — used for PostGIS and the tile server in this tutorial (and optionally for the CLI itself).
-- **If you run the CLI locally**: Python 3.11+, [uv](https://docs.astral.sh/uv/), and the geospatial toolchain — `psql`, GDAL/OGR (`ogr2ogr`), `imposm`, `tippecanoe` + `tile-join`, `wget`, and the `aws` CLI. [Installation](installation.md) covers installing each tool; `rbt validate` (Step 3) verifies them for you.
+- **If you run the CLI locally**: Python 3.13+, [uv](https://docs.astral.sh/uv/), and the geospatial toolchain — `psql`, GDAL/OGR (`ogr2ogr`), `imposm`, `tippecanoe` + `tile-join`, `wget`, and the `aws` CLI. [Installation](installation.md) covers installing each tool; `rbt validate` (Step 3) verifies them for you.
 
 Hardware expectations depend heavily on the size of your extract; see [Performance & Sizing](performance.md) before attempting anything larger than a country.
 
@@ -71,7 +71,7 @@ If you plan to use the Docker Compose services, also copy `env.example` to `.env
 
 === "Docker (recommended)"
 
-    The `postgres` service (PostGIS 17 / 3.5) has no profile, so it starts with a plain `up`:
+    The `postgres` service (PostGIS 18 / 3.6) has no profile, so it starts with a plain `up`:
 
     ```bash
     docker compose up -d postgres
@@ -81,7 +81,7 @@ If you plan to use the Docker Compose services, also copy `env.example` to `.env
 
 === "Existing PostgreSQL"
 
-    Use any PostgreSQL 17 server with PostGIS 3.5 available. Point `PG_HOST` / `PG_PORT` / `PG_USR` / `PG_PASS` at it; the user needs permission to create databases and extensions. `rbt setup --setup-database` (Step 5) creates the database and extensions for you.
+    Use any PostgreSQL 18 server with PostGIS 3.6 available. Point `PG_HOST` / `PG_PORT` / `PG_USR` / `PG_PASS` at it; the user needs permission to create databases and extensions. `rbt setup --setup-database` (Step 5) creates the database and extensions for you.
 
 ## Step 3 — Install the CLI and validate
 

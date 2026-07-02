@@ -3,7 +3,7 @@
 [![CI](https://github.com/MJJ203/rbt-data-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/MJJ203/rbt-data-generator/actions/workflows/ci.yml)
 [![Docs](https://github.com/MJJ203/rbt-data-generator/actions/workflows/docs.yml/badge.svg)](https://mjj203.github.io/rbt-data-generator/)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](pyproject.toml)
 
 An open-source system for generating multi-projection Mapbox Vector Tiles from
 authoritative geospatial data sources (OpenStreetMap, Natural Earth, NGA GNS,
@@ -64,11 +64,11 @@ for a guided walkthrough using a small regional extract.
 
 ## Prerequisites
 
-- PostgreSQL 17 with PostGIS 3.5
-- GDAL/OGR 3.8+ with MVT and FlatGeoBuf drivers
-- imposm3 0.11.1+
+- PostgreSQL 18 with PostGIS 3.6
+- GDAL/OGR 3.13+ with MVT and FlatGeoBuf drivers
+- imposm3 0.14.2+
 - tippecanoe (felt/tippecanoe fork)
-- Python 3.11+
+- Python 3.13+
 - Hardware: see [Performance & Sizing](https://mjj203.github.io/rbt-data-generator/performance/)
   — a small regional extract runs on a 16 GB laptop; a full planet needs
   server-class hardware.

@@ -177,7 +177,7 @@ $ rbt osm [OPTIONS] COMMAND [ARGS]...
 * `run`: Start the continuous imposm run loop...
 * `status`: Show whether updates are running and the...
 * `stop`: Stop a running `rbt osm run` supervisor.
-* `import`
+* `import`: Run the OSM data importer.
 
 ### `rbt osm run`
 
@@ -223,6 +223,13 @@ $ rbt osm stop [OPTIONS]
 * `--help`: Show this message and exit.
 
 ### `rbt osm import`
+
+Run the OSM data importer.
+
+Alias for ``rbt import osm``, kept here too since it reads naturally
+alongside ``run``/``status``/``stop``. Both dispatch the same
+:func:`rbt.importers.osm.import_osm`; prefer ``rbt import osm`` in new
+scripts for consistency with the other data sources.
 
 **Usage**:
 

@@ -8,11 +8,11 @@ with [Getting Started](getting-started.md).
 
 | Requirement | Version | Used for |
 |---|---|---|
-| PostgreSQL + PostGIS | 17 + 3.5 | The spatial database all imports land in. |
-| GDAL/OGR (`ogr2ogr`) | 3.8+ with MVT and FlatGeoBuf drivers | FlatGeoBuf exports (3857/3395) and the EPSG:4326 MVT backend. |
-| imposm3 | 0.11.1 | OSM planet import and continuous diff updates (Linux x86-64 only). |
-| tippecanoe (felt fork) | 2.78.0 | MBTiles generation for 3857/3395, plus `tile-join` and `tippecanoe-decode`. |
-| Python | 3.11+ ([uv](https://docs.astral.sh/uv/) recommended) | The `rbt` CLI. |
+| PostgreSQL + PostGIS | 18 + 3.6 | The spatial database all imports land in. |
+| GDAL/OGR (`ogr2ogr`) | 3.13+ with MVT and FlatGeoBuf drivers | FlatGeoBuf exports (3857/3395) and the EPSG:4326 MVT backend. |
+| imposm3 | 0.14.2 | OSM planet import and continuous diff updates (Linux x86-64 only). |
+| tippecanoe (felt fork) | 2.79.0 | MBTiles generation for 3857/3395, plus `tile-join` and `tippecanoe-decode`. |
+| Python | 3.13+ ([uv](https://docs.astral.sh/uv/) recommended) | The `rbt` CLI. |
 | aria2c, wget, AWS CLI | any recent | Importer downloads (planet PBF, GeoNames, Overture from S3). |
 | Optional: `7z`, `sqlite3`, osmium-tool/osmosis/osmctools, docker | — | Archive extraction, MBTiles inspection, OSM diff tooling. |
 
@@ -24,13 +24,13 @@ so run it after any install path below.
 
 === "Docker Compose (recommended)"
 
-    The compose file provisions PostgreSQL (`postgis/postgis:17-3.5` with the
+    The compose file provisions PostgreSQL (`postgis/postgis:18-3.6` with the
     tuned [`config/postgresql.conf`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/postgresql.conf) mounted) and
     builds a single multi-stage image
     ([`Dockerfile.production`](https://github.com/MJJ203/rbt-data-generator/blob/main/Dockerfile.production): Ubuntu 24.04, PGDG
-    client 17, GDAL, tippecanoe 2.78.0 built from source, imposm3 0.11.1, and
-    the `rbt` CLI). Behavior is selected per service via `command:`, not
-    separate images.
+    client 18, Python 3.13 + GDAL 3.13.1 via micromamba/conda-forge, tippecanoe
+    2.79.0 built from source, imposm3 0.14.2, and the `rbt` CLI). Behavior is
+    selected per service via `command:`, not separate images.
 
     ```bash
     git clone https://github.com/MJJ203/rbt-data-generator.git
@@ -68,10 +68,11 @@ so run it after any install path below.
 === "Ubuntu 24.04"
 
     These steps mirror what `Dockerfile.production` installs. Ubuntu 24.04's
-    `gdal-bin` (GDAL 3.8.x) satisfies the MVT/FlatGeoBuf requirement.
+    apt repo only ships GDAL 3.8.x and Python 3.12, so both come from
+    [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html)/conda-forge instead, to track current upstream releases.
 
     ```bash
-    # PGDG repository for PostgreSQL 17
+    # PGDG repository for PostgreSQL 18
     sudo apt-get update && sudo apt-get install -y curl ca-certificates gnupg lsb-release
     sudo install -d /usr/share/postgresql-common/pgdg
     curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
@@ -81,21 +82,28 @@ so run it after any install path below.
     sudo apt-get update
 
     # Client tools + importer dependencies (same set as the Docker image)
-    sudo apt-get install -y postgresql-client-17 gdal-bin python3-gdal \
+    sudo apt-get install -y postgresql-client-18 \
         sqlite3 aria2 p7zip-full awscli osmctools osmium-tool osmosis
 
     # If the database runs on this host too:
-    sudo apt-get install -y postgresql-17 postgresql-17-postgis-3
+    sudo apt-get install -y postgresql-18 postgresql-18-postgis-3
 
-    # tippecanoe 2.78.0 (felt fork, built from source)
+    # Python 3.13 + GDAL 3.13.1 via micromamba/conda-forge
+    curl -fsSL "https://github.com/mamba-org/micromamba-releases/releases/download/2.8.1-0/micromamba-linux-64" \
+      -o /usr/local/bin/micromamba
+    sudo chmod +x /usr/local/bin/micromamba
+    micromamba create -y -n geo -c conda-forge python=3.13 gdal=3.13.1 pip
+    export PATH="$HOME/micromamba/envs/geo/bin:$PATH"   # add to your shell profile
+
+    # tippecanoe 2.79.0 (felt fork, built from source)
     sudo apt-get install -y build-essential libsqlite3-dev zlib1g-dev git
-    git clone --depth=1 --branch 2.78.0 https://github.com/felt/tippecanoe.git
+    git clone --depth=1 --branch 2.79.0 https://github.com/felt/tippecanoe.git
     (cd tippecanoe && make -j"$(nproc)" && sudo make install)
 
-    # imposm3 0.11.1
-    wget https://github.com/omniscale/imposm3/releases/download/v0.11.1/imposm-0.11.1-linux-x86-64.tar.gz
-    tar xzf imposm-0.11.1-linux-x86-64.tar.gz
-    sudo mv imposm-0.11.1-linux-x86-64/imposm /usr/local/bin/
+    # imposm3 0.14.2
+    wget https://github.com/omniscale/imposm3/releases/download/v0.14.2/imposm-0.14.2-linux-x86-64.tar.gz
+    tar xzf imposm-0.14.2-linux-x86-64.tar.gz
+    sudo mv imposm-0.14.2-linux-x86-64/imposm /usr/local/bin/
 
     # The rbt CLI
     git clone https://github.com/MJJ203/rbt-data-generator.git
@@ -117,7 +125,7 @@ so run it after any install path below.
     Docker Compose is the recommended setup on macOS.
 
     ```bash
-    brew install postgresql@17 postgis gdal tippecanoe aria2 awscli p7zip
+    brew install postgresql@18 postgis gdal tippecanoe aria2 awscli p7zip
     # No imposm3 formula or macOS release exists — use Docker for `rbt setup`
     # --import-osm-data and `rbt osm run`.
 

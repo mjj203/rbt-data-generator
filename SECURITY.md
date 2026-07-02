@@ -23,7 +23,7 @@ Please **do not** open a public GitHub issue for suspected vulnerabilities. Inst
 
 ## Hardening recommendations
 
-- Run `postgres` with TLS enabled. The Dockerfiles install `postgresql-client-17` which negotiates TLS automatically.
+- Run `postgres` with TLS enabled. The Dockerfiles install `postgresql-client-18` which negotiates TLS automatically.
 - Never commit `.env` files. The `.gitignore` already excludes them; double-check before force-pushing.
 - Rotate `DATABASE_PASSWORD` on a schedule; use `docker compose` secrets or a secrets manager rather than inline env vars in production.
 - Restrict network access to the `postgres` service; the default compose file exposes port 5432 to localhost only — do not widen without a firewall in front.
@@ -31,6 +31,7 @@ Please **do not** open a public GitHub issue for suspected vulnerabilities. Inst
 
 ## Dependency provenance
 
-- **imposm3 0.11.1** — downloaded from `github.com/omniscale/imposm3`; checksum verified in the Dockerfile.
+- **imposm3 0.14.2** — downloaded from `github.com/omniscale/imposm3`; checksum verified in the Dockerfile.
 - **tippecanoe** — built from `felt/tippecanoe` (maintained fork); pinned to a release tag.
-- **GDAL / OGR / PostGIS** — installed from distribution apt repositories with signed metadata.
+- **GDAL / Python** — installed via micromamba from the `conda-forge` channel, pinned to exact versions in `Dockerfile.production`.
+- **PostGIS** — installed from the official `postgis/postgis` image and distribution apt repositories with signed metadata.

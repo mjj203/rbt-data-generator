@@ -15,7 +15,7 @@ rbt-data-generator/
 ├── config/
 │   ├── rbt.conf                 # Central KEY=VALUE config (bash-sourceable, parsed by Python)
 │   ├── layers.yml               # Declarative layer registry — the heart of tile generation
-│   ├── postgresql.conf          # Tuned PostgreSQL 17 config, mounted by docker-compose
+│   ├── postgresql.conf          # Tuned PostgreSQL 18 config, mounted by docker-compose
 │   ├── tile-server.json         # TileServer-GL config for the `serve` profile
 │   └── prometheus.yml           # Prometheus scrape config for the `monitoring` profile
 ├── src/rbt/                     # The `rbt` CLI — the ONLY orchestrator
@@ -58,7 +58,7 @@ rbt-data-generator/
 ├── output/                      # Generated artifacts (gitignored): tiles/, logs/, temp/
 ├── .github/workflows/           # CI (ruff + mypy + pytest) and docs deployment
 ├── docker-compose.yml           # Profiles: setup / production / serve / smoke / monitoring
-├── Dockerfile.production        # Multi-stage image: GDAL + tippecanoe 2.78.0 + imposm 0.11.1 + rbt
+├── Dockerfile.production        # Multi-stage image: GDAL + tippecanoe 2.79.0 + imposm 0.14.2 + rbt
 ├── pyproject.toml               # Python package (`rbt`), ruff / mypy / pytest config
 └── mkdocs.yml                   # Documentation build
 ```

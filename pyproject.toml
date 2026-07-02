@@ -7,7 +7,7 @@ name = "rbt"
 version = "0.1.0"
 description = "RBT Vector Tiles — Python CLI for geospatial tile generation from OSM, Overture, GeoNames, and Natural Earth."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 license = { file = "LICENSE" }
 authors = [
   { name = "Michael Jones" },
@@ -19,8 +19,7 @@ classifiers = [
   "Operating System :: POSIX :: Linux",
   "Operating System :: MacOS",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
@@ -52,7 +51,7 @@ packages = ["src/rbt"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py313"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
@@ -81,7 +80,7 @@ filterwarnings = [
 ]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 strict = true
 ignore_missing_imports = true
 

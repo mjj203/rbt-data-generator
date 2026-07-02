@@ -58,7 +58,7 @@ Common causes:
 
 - `DATABASE_PASSWORD`/`PG_PASS` is unset and the server requires a password.
 - The host in `DATABASE_HOST` is unreachable from the container (use the Compose service name, e.g. `postgres`, not `localhost`).
-- PostgreSQL client version mismatch — the Dockerfiles install `postgresql-client-17`; older clients may miss features used by PG 17 servers.
+- PostgreSQL client version mismatch — the Dockerfiles install `postgresql-client-18`; older clients may miss features used by PG 18 servers.
 
 ## Setup failures (database initialization)
 
@@ -133,7 +133,7 @@ These files are mounted by `docker-compose.yml` but templated/shipped under [`co
 
 ## Tippecanoe or imposm not found
 
-The production Dockerfile builds tippecanoe from the pinned felt/tippecanoe fork and downloads imposm3 0.11.1 with checksum verification. If building locally, ensure:
+The production Dockerfile builds tippecanoe from the pinned felt/tippecanoe fork and downloads imposm3 0.14.2 with checksum verification. If building locally, ensure:
 
 ```bash
 rbt validate

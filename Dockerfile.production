@@ -8,19 +8,27 @@
 # =============================================================================
 
 ARG UBUNTU_VERSION=24.04
-ARG POSTGRES_CLIENT_VERSION=17
-ARG IMPOSM_VERSION=0.11.1
+ARG POSTGRES_CLIENT_VERSION=18
+ARG IMPOSM_VERSION=0.14.2
 # Set to the actual sha256 of the imposm release tarball to enforce verification.
 # Pass `SKIP` to bypass the check (useful for local development only).
 ARG IMPOSM_SHA256=SKIP
-ARG TIPPECANOE_REF=2.78.0
+ARG TIPPECANOE_REF=2.79.0
+ARG MICROMAMBA_VERSION=2.8.1-0
+ARG PYTHON_VERSION=3.13
+ARG GDAL_VERSION=3.13.1
 
 # -----------------------------------------------------------------------------
-# Stage 1: base system with GDAL / PostGIS client tools
+# Stage 1: base system with PostGIS client tools + a micromamba env providing
+# Python and GDAL (Ubuntu 24.04's apt repo only ships GDAL 3.8.x / Python 3.12,
+# so both come from conda-forge instead to track current upstream releases).
 # -----------------------------------------------------------------------------
 FROM ubuntu:${UBUNTU_VERSION} AS base
 
 ARG POSTGRES_CLIENT_VERSION
+ARG MICROMAMBA_VERSION
+ARG PYTHON_VERSION
+ARG GDAL_VERSION
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
@@ -38,8 +46,6 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         postgresql-client-${POSTGRES_CLIENT_VERSION} \
-        gdal-bin \
-        python3-gdal \
         sqlite3 \
         aria2 \
         p7zip-full \
@@ -48,6 +54,17 @@ RUN apt-get update \
         osmium-tool \
         osmosis \
     && rm -rf /var/lib/apt/lists/*
+
+# Python + GDAL via micromamba/conda-forge, so both track current upstream
+# releases regardless of what the base distro ships.
+ENV MAMBA_ROOT_PREFIX=/opt/conda
+RUN curl -fsSL "https://github.com/mamba-org/micromamba-releases/releases/download/${MICROMAMBA_VERSION}/micromamba-linux-64" \
+         -o /usr/local/bin/micromamba \
+    && chmod +x /usr/local/bin/micromamba \
+    && micromamba create -y -n geo -c conda-forge \
+         "python=${PYTHON_VERSION}" "gdal=${GDAL_VERSION}" pip \
+    && micromamba clean --all --yes
+ENV PATH="/opt/conda/envs/geo/bin:${PATH}"
 
 # -----------------------------------------------------------------------------
 # Stage 2: build tippecanoe from the maintained felt fork
@@ -94,11 +111,6 @@ RUN set -eux \
 # -----------------------------------------------------------------------------
 FROM base AS python-builder
 
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-pip python3-venv \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /build
 
 COPY pyproject.toml README.md LICENSE ./
@@ -112,11 +124,6 @@ RUN python3 -m venv /opt/rbt-venv \
 # Stage 5: runtime image
 # -----------------------------------------------------------------------------
 FROM base AS runtime
-
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=tippecanoe-builder /opt/tippecanoe/bin/tippecanoe /usr/local/bin/tippecanoe
 COPY --from=tippecanoe-builder /opt/tippecanoe/bin/tile-join /usr/local/bin/tile-join
