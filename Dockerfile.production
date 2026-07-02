@@ -1,63 +1,180 @@
-# RBT Vector Tiles Production Container
-# ====================================
-# Container for continuous operations (OSM updates and tile generation)
+# syntax=docker/dockerfile:1.7
+# =============================================================================
+# RBT Vector Tiles Multi-Stage Image
+# =============================================================================
+# A single image used for both database initialization (setup profile) and
+# continuous operations (production profile). Behavior is selected via the
+# compose `command:` field, not via separate images.
+# =============================================================================
 
-FROM ubuntu:22.04
+ARG UBUNTU_VERSION=24.04
+ARG POSTGRES_CLIENT_VERSION=18
+ARG IMPOSM_VERSION=0.14.2
+# Set to the actual sha256 of the imposm release tarball to enforce verification.
+# Pass `SKIP` to bypass the check (useful for local development only).
+ARG IMPOSM_SHA256=SKIP
+ARG TIPPECANOE_REF=2.79.0
+ARG MICROMAMBA_VERSION=2.8.1-0
+ARG PYTHON_VERSION=3.13
+ARG GDAL_VERSION=3.13.1
 
-# Avoid interactive prompts during package installation
+# -----------------------------------------------------------------------------
+# Stage 1: base system with PostGIS client tools + a micromamba env providing
+# Python and GDAL (Ubuntu 24.04's apt repo only ships GDAL 3.8.x / Python 3.12,
+# so both come from conda-forge instead to track current upstream releases).
+# -----------------------------------------------------------------------------
+FROM ubuntu:${UBUNTU_VERSION} AS base
+
+ARG POSTGRES_CLIENT_VERSION
+ARG MICROMAMBA_VERSION
+ARG PYTHON_VERSION
+ARG GDAL_VERSION
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    postgresql-client-14 \
-    gdal-bin \
-    python3-gdal \
-    wget \
-    curl \
-    sqlite3 \
-    ca-certificates \
+# Fail piped RUN steps if any stage of the pipe fails (hadolint DL4006).
+# NOTE: SHELL is a per-stage build setting — it does NOT carry over to later
+# stages started with `FROM base AS ...`, even though the base image's layers
+# (and ENV/WORKDIR) do. Any stage below with a pipe in a RUN command must
+# re-declare this SHELL line.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        wget \
+        gnupg \
+        lsb-release \
+        unzip \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+         | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+         > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        postgresql-client-${POSTGRES_CLIENT_VERSION} \
+        sqlite3 \
+        aria2 \
+        p7zip-full \
+        osmctools \
+        osmium-tool \
+        osmosis \
+    && rm -rf /var/lib/apt/lists/* \
+    # Ubuntu dropped the `awscli` apt package (the legacy v1 CLI); install AWS
+    # CLI v2 from the official bundle instead. `uname -m` maps directly onto
+    # AWS's per-arch bundle names (x86_64 / aarch64), so this works unmodified
+    # on both the amd64 CI/production target and arm64 local dev.
+    && curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
+    && unzip -q /tmp/awscliv2.zip -d /tmp \
+    && /tmp/aws/install \
+    && rm -rf /tmp/awscliv2.zip /tmp/aws
+
+# Python + GDAL via micromamba/conda-forge, so both track current upstream
+# releases regardless of what the base distro ships.
+ENV MAMBA_ROOT_PREFIX=/opt/conda
+RUN curl -fsSL "https://github.com/mamba-org/micromamba-releases/releases/download/${MICROMAMBA_VERSION}/micromamba-linux-64" \
+         -o /usr/local/bin/micromamba \
+    && chmod +x /usr/local/bin/micromamba \
+    && micromamba create -y -n geo -c conda-forge \
+         "python=${PYTHON_VERSION}" "gdal=${GDAL_VERSION}" pip \
+    && micromamba clean --all --yes
+ENV PATH="/opt/conda/envs/geo/bin:${PATH}"
+
+# -----------------------------------------------------------------------------
+# Stage 2: build tippecanoe from the maintained felt fork
+# -----------------------------------------------------------------------------
+FROM base AS tippecanoe-builder
+
+ARG TIPPECANOE_REF
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        libsqlite3-dev \
+        zlib1g-dev \
+        git \
+    && git clone --depth=1 --branch "${TIPPECANOE_REF}" https://github.com/felt/tippecanoe.git /tmp/tippecanoe \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Imposm3
-RUN wget -O imposm.tar.gz https://github.com/omniscale/imposm3/releases/download/v0.11.1/imposm-0.11.1-linux-x86-64.tar.gz \
-    && tar xzf imposm.tar.gz \
-    && mv imposm-0.11.1-linux-x86-64/imposm /usr/local/bin/ \
-    && rm -rf imposm*
+WORKDIR /tmp/tippecanoe
+RUN make -j"$(nproc)" \
+    && make install PREFIX=/opt/tippecanoe \
+    && rm -rf /tmp/tippecanoe
 
-# Install Tippecanoe
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libsqlite3-dev \
-    zlib1g-dev \
-    git \
-    && git clone https://github.com/mapbox/tippecanoe.git \
-    && cd tippecanoe \
-    && make -j$(nproc) \
-    && make install \
-    && cd .. \
-    && rm -rf tippecanoe \
-    && apt-get remove -y build-essential git \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
+# -----------------------------------------------------------------------------
+# Stage 3: download and verify imposm3
+# -----------------------------------------------------------------------------
+FROM base AS imposm-fetcher
 
-# Set working directory
+ARG IMPOSM_VERSION
+ARG IMPOSM_SHA256
+
+# Re-declared: SHELL does not carry over from the base stage (see note there).
+# This stage's RUN pipes the sha256 line into `sha256sum -c -`.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN set -eux \
+    && wget -nv -O /tmp/imposm.tar.gz \
+         "https://github.com/omniscale/imposm3/releases/download/v${IMPOSM_VERSION}/imposm-${IMPOSM_VERSION}-linux-x86-64.tar.gz" \
+    # SHA256 verification kept soft until the pin ARG is provided at build time
+    && if [ -n "${IMPOSM_SHA256:-}" ] && [ "${IMPOSM_SHA256}" != "SKIP" ]; then \
+           echo "${IMPOSM_SHA256}  /tmp/imposm.tar.gz" | sha256sum -c -; \
+       fi \
+    && mkdir -p /opt/imposm \
+    && tar -xzf /tmp/imposm.tar.gz -C /opt/imposm --strip-components=1 \
+    && rm /tmp/imposm.tar.gz
+
+# -----------------------------------------------------------------------------
+# Stage 4: Python CLI install (builds the rbt wheel)
+# -----------------------------------------------------------------------------
+FROM base AS python-builder
+
+WORKDIR /build
+
+COPY pyproject.toml README.md LICENSE ./
+COPY src/ ./src/
+
+RUN python3 -m venv /opt/rbt-venv \
+    && /opt/rbt-venv/bin/pip install --no-cache-dir --upgrade pip \
+    && /opt/rbt-venv/bin/pip install --no-cache-dir .
+
+# -----------------------------------------------------------------------------
+# Stage 5: runtime image
+# -----------------------------------------------------------------------------
+FROM base AS runtime
+
+COPY --from=tippecanoe-builder /opt/tippecanoe/bin/tippecanoe /usr/local/bin/tippecanoe
+COPY --from=tippecanoe-builder /opt/tippecanoe/bin/tile-join /usr/local/bin/tile-join
+COPY --from=tippecanoe-builder /opt/tippecanoe/bin/tippecanoe-decode /usr/local/bin/tippecanoe-decode
+COPY --from=imposm-fetcher     /opt/imposm/imposm /usr/local/bin/imposm
+COPY --from=python-builder     /opt/rbt-venv /opt/rbt-venv
+
+# Expose the Python CLI on PATH.
+ENV PATH="/opt/rbt-venv/bin:${PATH}"
+
 WORKDIR /app
 
-# Copy application files
-COPY production/ ./production/
 COPY config/ ./config/
+COPY scripts/ ./scripts/
+COPY setup/ ./setup/
+COPY production/ ./production/
 COPY tools/ ./tools/
 
-# Make scripts executable
-RUN find ./production -name "*.sh" -exec chmod +x {} \; \
-    && find ./tools -name "*.sh" -exec chmod +x {} \;
+RUN find ./setup ./production ./tools ./scripts -name "*.sh" -exec chmod +x {} \; \
+    && mkdir -p output/logs output/tiles cache \
+    && groupadd --system rbt \
+    && useradd --system --gid rbt --home-dir /app --shell /usr/sbin/nologin rbt \
+    && chown -R rbt:rbt /app
 
-# Create output directories
-RUN mkdir -p output/logs output/tiles cache
+# Run as a non-root user. Any host/named volumes mounted for writable paths
+# (output/, cache/, and the OSM /mnt/* data dirs) must be writable by this uid.
+USER rbt
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD ./tools/health-check.sh || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD rbt health || exit 1
 
-# Default command (tile generation)
-CMD ["./production/generate-tiles.sh", "--all"]
+# Default command runs continuous tile generation via the Python CLI. Compose
+# overrides this for setup (`rbt setup --all`) and OSM (`rbt osm run`).
+CMD ["rbt", "tiles", "--all"]

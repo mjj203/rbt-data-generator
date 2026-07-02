@@ -1,0 +1,70 @@
+name: Data quality
+description: A map feature is wrong, missing, or misplaced in the generated tiles.
+labels: [data-quality]
+body:
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Layer category
+      options:
+        - aeroway
+        - boundary
+        - building
+        - cemetery
+        - geonames (places / hydrographic names)
+        - transportation
+        - utilities
+        - other (cultural)
+        - builtuparea
+        - contour
+        - glacier
+        - landcover
+        - mountain
+        - park
+        - water
+        - water_label
+        - waterway
+        - inland_water
+        - not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: projection
+    attributes:
+      label: Projection
+      options:
+        - "3857 (Web Mercator)"
+        - "3395 (World Mercator)"
+        - "4326 (Geographic)"
+        - all / not sure
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Location
+      description: Longitude/latitude or a place name, plus the zoom level you observed it at.
+      placeholder: "8.54, 47.37 at z12 (Zurich)"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+      description: What should the tile show, and what does it show instead? Screenshots welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Likely data source (if known)
+      description: Where the feature originates — helps route the fix.
+      options:
+        - OpenStreetMap
+        - Natural Earth
+        - NGA GNS (geonames)
+        - Overture buildings
+        - FieldMaps (admin boundaries)
+        - OurAirports
+        - MIRTA (military installations)
+        - not sure

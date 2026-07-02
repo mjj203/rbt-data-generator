@@ -1,58 +1,44 @@
 # Database Setup and Initialization
 
-This directory contains all scripts and configurations needed for one-time database initialization. These scripts download global datasets, import them into PostgreSQL, and create optimized database views for tile generation.
+This directory contains the data import scripts and schema SQL used for one-time database initialization. The phase is orchestrated entirely by the `rbt` CLI: `rbt setup --all` downloads global datasets, imports them into PostgreSQL, and creates the optimized `rbt.*` views for tile generation.
 
 ## ⚠️ Important Note
 
-**These scripts are run ONCE when setting up a new RBT system.** After initialization is complete, you'll use the scripts in `production/` for ongoing operations.
+**The setup phase runs ONCE when standing up a new RBT system.** After initialization is complete, ongoing operations (`rbt osm run`, `rbt tiles`) are covered by the [production documentation](production-readme.md).
 
-## ✨ New Features & Enhancements
+## 🧭 How the Setup Phase Is Orchestrated
 
-### CI/CD Optimizations
+`rbt setup --all` runs three stages in dependency order (`src/rbt/setup_db.py`):
 
-- **Modular schema processing** with independent SQL files for each layer type
-- **Transaction-based execution** prevents partial failures from corrupting the database
-- **Comprehensive dependency validation** ensures all prerequisites are met
-- **Structured logging** with timestamps, PIDs, and severity levels
-- **Progress tracking** and status reporting for long-running operations
+1. **Bootstrap** — creates the database and extensions (`postgis`, `postgis_raster`, `hstore`, `pg_trgm`) natively via psycopg. No bash involved.
+2. **Data import** — the four importers in this directory remain Bash leaf scripts by design. Each carries a `CONTRACT` header documenting its inputs, outputs, and exit behavior:
+    - [`data-sources/osm/import-osm-data.sh`](https://github.com/MJJ203/rbt-data-generator/blob/main/setup/data-sources/osm/import-osm-data.sh) — invoked via `rbt import osm`
+    - [`data-sources/reference-data/import-reference-data.sh`](https://github.com/MJJ203/rbt-data-generator/blob/main/setup/data-sources/reference-data/import-reference-data.sh) — invoked via `rbt import reference`
+    - [`data-sources/reference-data/import-geonames.sh`](https://github.com/MJJ203/rbt-data-generator/blob/main/setup/data-sources/reference-data/import-geonames.sh) — invoked via `rbt import geonames`
+    - [`data-sources/reference-data/import-buildings.sh`](https://github.com/MJJ203/rbt-data-generator/blob/main/setup/data-sources/reference-data/import-buildings.sh) — invoked via `rbt import buildings`
+3. **Schema processing** — `rbt schema run --all` executes the eight PL/pgSQL files under `data-sources/schemas/` through `psql -v ON_ERROR_STOP=1`, creating the materialized views and indexes that tile generation reads.
 
-### Performance Improvements
-
-- **Parallel data ingestion** with configurable job limits
-- **Materialized views** for frequently-accessed spatial queries
-- **GIN trigram indexes** for fast fuzzy text matching and pattern searches
-- **Optimized spatial indexes** with clustering and vacuum operations
-- **Memory-optimized settings** for large dataset processing
-
-### Robustness Features
-
-- **Automatic retry mechanisms** with exponential backoff
-- **Graceful error handling** with cleanup and signal management
-- **Container-friendly design** with health checks and signal handling
-- **Resume capability** - scripts skip already-completed steps
-- **Temporary file preservation** option for debugging
-
-### Configuration Management
-
-- **Centralized configuration** via `config/rbt.conf` eliminates duplicate variables
-- **Standardized variable naming** with `SCRIPT_*` prefix for common settings
-- **Consistent behavior** across all scripts with shared retry logic and timeouts
-- **Easy customization** - change settings in one place, affects all scripts
-- **Centralized logging** - all script logs go to a shared directory
-- **Environment override** support for per-run customizations
+The leaf scripts are invoked only through the `rbt` CLI, which resolves `config/rbt.conf` and exports the `DATABASE_*`/`PG*` environment they expect. Do not run them directly.
 
 ## 🚀 Quick Start
 
-### Simple Setup
+=== "rbt CLI"
 
-```bash
-# From the project root directory
-./setup/init-database.sh
-```
+    ```bash
+    # From the project root directory
+    rbt setup --all
+    ```
+
+=== "Docker Compose"
+
+    ```bash
+    # The setup profile runs `rbt setup --all` against the postgres service
+    docker compose --profile setup up rbt-setup
+    ```
 
 This single command orchestrates the entire setup process with:
 
-- Automatic environment validation
+- Automatic environment validation (run `rbt validate` first for a full pre-flight report)
 - Progress tracking and logging
 - Error recovery capabilities
 - Optimized parallel processing
@@ -62,77 +48,72 @@ This single command orchestrates the entire setup process with:
 If you need more control or want to run individual components:
 
 ```bash
+# 0. Bootstrap the database and extensions
+rbt setup --setup-database
+
 # 1. Import OSM data (several hours)
-./setup/data-sources/osm/import-osm-data.sh
+rbt import osm
 
 # 2. Import reference datasets (1-2 hours)
-./setup/data-sources/reference-data/import-reference-data.sh
-./setup/data-sources/reference-data/import-geonames.sh  
-./setup/data-sources/reference-data/import-buildings.sh
+rbt import reference
+rbt import geonames
+rbt import buildings
 
-# 3. Process database schemas using wrapper scripts (30-60 minutes)
-# Physical layers (core, landcover, water, terrain)
-./setup/data-sources/schemas/physical/process-physical-schemas.sh --all
+# 3. Process database schemas (30-60 minutes)
+rbt schema run --all
 
-# Cultural layers (core, transportation, railway, infrastructure) 
-./setup/data-sources/schemas/cultural/process-cultural-schemas.sh --all
-
-# Or process individual schema types:
-./setup/data-sources/schemas/physical/process-physical-schemas.sh --landcover
-./setup/data-sources/schemas/cultural/process-cultural-schemas.sh --highway
+# Or process by layer type / individual unit:
+rbt schema run --type physical
+rbt schema run --type cultural
+rbt schema run landcover
+rbt schema run highway
 ```
 
 ### Individual Schema Processing
 
-For fine-grained control, you can run individual SQL scripts:
+`rbt schema list` shows the registered units (defined in the `schemas:` block of `config/layers.yml`):
 
-```bash
-cd setup/data-sources/schemas
+| Key | Type | SQL file | Description |
+|---|---|---|---|
+| `physical` | physical | `physical/physical-core.sql` | Core physical views (water, glacier, built-up areas) |
+| `landcover` | physical | `physical/landcover.sql` | Landcover and park views |
+| `water` | physical | `physical/water-features.sql` | Water bodies, waterways, and water labels |
+| `contour` | physical | `physical/terrain.sql` | Contours and mountain labels |
+| `cultural` | cultural | `cultural/cultural-core.sql` | Core cultural views (aeroway, buildings, boundaries, places) |
+| `highway` | cultural | `cultural/transportation.sql` | Roads, ferries, and ports |
+| `railway` | cultural | `cultural/transportation-railway.sql` | Railways and stations |
+| `aero` | cultural | `cultural/infrastructure.sql` | Utility and infrastructure views (dams, powerlines, pipelines) |
 
-# Physical layers
-psql -f physical/physical-core.sql
-psql -f physical/water-features.sql 
-psql -f physical/landcover.sql
-psql -f physical/terrain.sql
-
-# Cultural layers  
-psql -f cultural/cultural-core.sql
-psql -f cultural/transportation.sql
-psql -f cultural/transportation-railway.sql
-psql -f cultural/infrastructure.sql
-```
+For the lowest-level escape hatch, the SQL files can still be fed to `psql` by hand from their own directory, but `rbt schema run` adds `ON_ERROR_STOP`, per-unit logs under `output/logs/`, and the resolved connection environment.
 
 ## 📁 Directory Structure
 
 ```text
 setup/
-├── init-database.sh              # Main setup orchestrator
 ├── README.md                     # This documentation
-├── data-sources/                 # Data import scripts
-│   ├── osm/                      # OpenStreetMap data
-│   │   ├── import-osm-data.sh    # OSM planet import with diff handling
-│   │   ├── imposm-config.json    # Imposm3 configuration
-│   │   └── imposm-mapping.yaml   # OSM tag mappings (optimized)
-│   │
-│   ├── reference-data/           # Non-OSM datasets
-│   │   ├── import-reference-data.sh  # FieldMaps, Natural Earth, MIRTA, OurAirports, OSM Ocean & Antarctica Glaciers
-│   │   ├── import-geonames.sh        # Geographic names (parallel download)
-│   │   └── import-buildings.sh       # Overture building footprints
-│   │
-│   └── schemas/                  # Database schema processing
-│       ├── physical/             # Physical feature processing
-│       │   ├── process-physical-schemas.sh  # Wrapper script for all physical layers
-│       │   ├── physical-core.sql           # Core physical features (glaciers, parks, mountains)
-│       │   ├── water-features.sql          # Water body processing with classification
-│       │   ├── landcover.sql              # Land cover classification and zoom levels
-│       │   └── terrain.sql                # Elevation contours and terrain features
-│       │
-│       └── cultural/             # Cultural feature processing
-│           ├── process-cultural-schemas.sh   # Wrapper script for all cultural layers
-│           ├── cultural-core.sql             # Core cultural features (ports, places, utilities)
-│           ├── transportation.sql            # Roads and highway classification
-│           ├── transportation-railway.sql    # Railway systems and stations
-│           └── infrastructure.sql            # Airports and aviation infrastructure
+└── data-sources/                 # Data import scripts + schema SQL
+    ├── osm/                      # OpenStreetMap data
+    │   ├── import-osm-data.sh    # Leaf script for `rbt import osm`
+    │   ├── imposm-config.json    # Imposm3 configuration
+    │   └── imposm-mapping.yaml   # OSM tag mappings (optimized)
+    │
+    ├── reference-data/           # Non-OSM datasets
+    │   ├── import-reference-data.sh  # Leaf script for `rbt import reference`
+    │   ├── import-geonames.sh        # Leaf script for `rbt import geonames`
+    │   └── import-buildings.sh       # Leaf script for `rbt import buildings`
+    │
+    └── schemas/                  # SQL units executed by `rbt schema run`
+        ├── physical/             # Physical feature processing
+        │   ├── physical-core.sql           # Core physical features (glaciers, parks, mountains)
+        │   ├── water-features.sql          # Water body processing with classification
+        │   ├── landcover.sql               # Land cover classification and zoom levels
+        │   └── terrain.sql                 # Elevation contours and terrain features
+        │
+        └── cultural/             # Cultural feature processing
+            ├── cultural-core.sql             # Core cultural features (ports, places, utilities)
+            ├── transportation.sql            # Roads and highway classification
+            ├── transportation-railway.sql    # Railway systems and stations
+            └── infrastructure.sql            # Airports and aviation infrastructure
 ```
 
 ## 🗃️ Data Sources
@@ -203,21 +184,19 @@ ogr2ogr -progress \
 
 ### 3. Schema Processing
 
-Modular SQL scripts with enhanced features:
+Modular SQL units dispatched by `rbt schema run`:
 
-- **Transaction-based execution** with error isolation
+- **Strict execution** — each unit runs with `ON_ERROR_STOP=1`, so a failing statement aborts that unit instead of silently continuing
 - **Materialized views** for optimal query performance
 - **GIN trigram indexes** for fuzzy text matching
 - **Zoom-level views** for efficient tile generation
-- **Comprehensive validation** and dependency checking
-- **Parallel processing** support for large datasets
-- **CI/CD optimizations** with structured logging
+- **Per-unit logs** under `output/logs/schema_<key>_<timestamp>.log`
 
 ## 🔧 Configuration
 
 ### Centralized Configuration with `rbt.conf`
 
-All scripts now use a centralized configuration file located at `config/rbt.conf`. This eliminates duplicate environment variables and provides consistent behavior across all scripts.
+All commands resolve configuration from `config/rbt.conf`, with environment variables taking precedence (`src/rbt/config.py`; legacy `PG_*` names are still accepted). The same file is sourced by the Bash leaf scripts, so a setting changed in one place affects everything.
 
 **Required** database connection settings (configured in `config/rbt.conf`):
 
@@ -277,10 +256,10 @@ OSM_VALIDATE_DOWNLOADS=${OSM_VALIDATE_DOWNLOADS:-true}       # Validate download
 
 **Default Usage** (uses `config/rbt.conf` settings):
 ```bash
-# All scripts automatically load configuration
-./setup/init-database.sh --all
-./setup/data-sources/osm/import-osm-data.sh --download-planet
-./setup/data-sources/reference-data/import-geonames.sh
+# All commands automatically load configuration
+rbt setup --all
+rbt import osm -- --download-planet
+rbt import geonames
 ```
 
 **Custom Configuration File**:
@@ -298,10 +277,10 @@ OSM_DATA_DIR=/fast/storage/osm-data      # Use faster storage for OSM
 **Override Individual Settings** (environment variables take precedence):
 ```bash
 # Override specific settings for a single run
-SCRIPT_DEBUG=true SCRIPT_PARALLEL_INGESTION=true ./setup/data-sources/reference-data/import-geonames.sh
+SCRIPT_DEBUG=true SCRIPT_PARALLEL_INGESTION=true rbt import geonames
 
 # Custom data directory for OSM import
-OSM_DATA_DIR=/tmp/osm-data ./setup/data-sources/osm/import-osm-data.sh --download-planet
+OSM_DATA_DIR=/tmp/osm-data rbt import osm -- --download-planet
 ```
 
 ### Resource Requirements
@@ -335,7 +314,6 @@ With recommended hardware and parallel processing enabled:
 | GeoNames Data | 60-90 minutes | Parallel download and ingestion (11 datasets) |
 | Buildings Data | 24 hours | Overture Maps building data from S3 |
 | Schema Processing | 2-4 hours | Materialized views and indexes |
-| **Total** | **4-7 hours** | Complete database initialization |
 
 **Performance Notes**:
 
@@ -377,14 +355,17 @@ SCRIPT_RETRY_COUNT=5
 SCRIPT_RETRY_DELAY=60
 
 # Or override for a single run
-SCRIPT_RETRY_COUNT=5 SCRIPT_RETRY_DELAY=60 ./setup/data-sources/osm/import-osm-data.sh --download-planet
+SCRIPT_RETRY_COUNT=5 SCRIPT_RETRY_DELAY=60 rbt import osm -- --download-planet
 ```
 
 #### 4. Database Connection Errors
 
 ```bash
-# Test connection manually
-psql "host=$PG_HOST dbname=rbt user=$PG_USR password=$PG_PASS" -c "SELECT version();"
+# Full pre-flight report (config, tools, DB, disk, memory)
+rbt validate
+
+# Or test the connection manually
+psql "host=$DATABASE_HOST dbname=rbt user=$DATABASE_USER password=$DATABASE_PASSWORD" -c "SELECT version();"
 ```
 
 ### Enhanced Debug Mode
@@ -397,61 +378,65 @@ vim config/rbt.conf
 # Set: SCRIPT_DEBUG=true and SCRIPT_VERBOSE=true
 
 # Method 2: Override for specific runs
-# Full debug mode for all scripts
-SCRIPT_DEBUG=true SCRIPT_VERBOSE=true ./setup/init-database.sh
+# Debug-level CLI logging plus leaf-script tracing
+SCRIPT_DEBUG=true SCRIPT_VERBOSE=true rbt --debug setup --all
 
 # Debug specific components
-SCRIPT_DEBUG=true SCRIPT_VERBOSE=true ./setup/data-sources/reference-data/import-geonames.sh
-SCRIPT_DEBUG=true SCRIPT_VERBOSE=true ./setup/data-sources/reference-data/import-buildings.sh
+SCRIPT_DEBUG=true SCRIPT_VERBOSE=true rbt import geonames
+SCRIPT_DEBUG=true SCRIPT_VERBOSE=true rbt import buildings
 
 # Preserve temporary files for inspection
-SCRIPT_CLEAN_TEMP_FILES=false SCRIPT_DEBUG=true ./setup/data-sources/osm/import-osm-data.sh
+SCRIPT_CLEAN_TEMP_FILES=false SCRIPT_DEBUG=true rbt import osm
 
 # Enable parallel processing with debug output
-SCRIPT_PARALLEL_INGESTION=true SCRIPT_DEBUG=true ./setup/data-sources/reference-data/import-reference-data.sh
+SCRIPT_PARALLEL_INGESTION=true SCRIPT_DEBUG=true rbt import reference
 ```
 
 ### Schema Processing Options
 
-Process schemas individually for troubleshooting:
+Process schema units individually for troubleshooting:
 
 ```bash
-# Process only specific physical layers
-./setup/data-sources/schemas/physical/process-physical-schemas.sh --landcover
-./setup/data-sources/schemas/physical/process-physical-schemas.sh --water
+# Process only specific physical units
+rbt schema run landcover
+rbt schema run water
 
-# Process only specific cultural layers  
-./setup/data-sources/schemas/cultural/process-cultural-schemas.sh --cultural
-./setup/data-sources/schemas/cultural/process-cultural-schemas.sh --highway
-./setup/data-sources/schemas/cultural/process-cultural-schemas.sh --railway
-./setup/data-sources/schemas/cultural/process-cultural-schemas.sh --aero
+# Process only specific cultural units
+rbt schema run cultural
+rbt schema run highway
+rbt schema run railway
+rbt schema run aero
+
+# Inspect the unit registry and preview without executing
+rbt schema list
+rbt schema run water --dry-run
 ```
 
 ### Logging and Monitoring
 
-All scripts provide comprehensive logging with different levels of detail:
+All commands provide comprehensive logging with different levels of detail.
 
 **Log Locations** (centralized in `${SHARED_LOG_DIR}`, defaults to `./output/logs`):
 
 ```bash
-# Main initialization log
-./output/logs/database_init_YYYYMMDD_HHMMSS.log
+# Per-invocation rbt CLI log
+./output/logs/rbt_YYYYMMDD_HHMMSS.log
 
-# Individual script logs (all centralized)
+# Individual importer logs (all centralized)
 ./output/logs/osm_import.log
 ./output/logs/database_setup_YYYYMMDD_HHMMSS.log
 ./output/logs/geonames_setup_YYYYMMDD_HHMMSS.log  
 ./output/logs/overture_buildings_YYYYMMDD_HHMMSS.log
 
-# Schema processing logs (centralized)
-./output/logs/cultural_execution_YYYYMMDD_HHMMSS.log
-./output/logs/highway_execution_YYYYMMDD_HHMMSS.log
-./output/logs/railway_execution_YYYYMMDD_HHMMSS.log
-./output/logs/aero_execution_YYYYMMDD_HHMMSS.log
-./output/logs/physical_execution_YYYYMMDD_HHMMSS.log
-./output/logs/landcover_execution_YYYYMMDD_HHMMSS.log
-./output/logs/water_execution_YYYYMMDD_HHMMSS.log
-./output/logs/contour_execution_YYYYMMDD_HHMMSS.log
+# Schema processing logs (one per unit)
+./output/logs/schema_physical_YYYYMMDD_HHMMSS.log
+./output/logs/schema_landcover_YYYYMMDD_HHMMSS.log
+./output/logs/schema_water_YYYYMMDD_HHMMSS.log
+./output/logs/schema_contour_YYYYMMDD_HHMMSS.log
+./output/logs/schema_cultural_YYYYMMDD_HHMMSS.log
+./output/logs/schema_highway_YYYYMMDD_HHMMSS.log
+./output/logs/schema_railway_YYYYMMDD_HHMMSS.log
+./output/logs/schema_aero_YYYYMMDD_HHMMSS.log
 
 # Job-specific logs (parallel processing) in temp directory
 ${SHARED_TEMP_DIR}/[job_name].log  # Default: ./output/temp/[job_name].log
@@ -477,27 +462,26 @@ ${SHARED_TEMP_DIR}/[job_name].log  # Default: ./output/temp/[job_name].log
 
 If setup fails partway through:
 
-1. **Check logs** in `output/logs/` and individual script temp directories
+1. **Check logs** in `output/logs/` and the temp directory
 2. **Identify failed step** from structured log output
 3. **Fix underlying issue** (disk space, network, permissions, etc.)
-4. **Resume setup** - scripts automatically skip completed steps
+4. **Resume setup** — re-running `rbt setup` is safe; importers skip completed work, or target the failed step directly (`rbt setup --import-geonames`)
 5. **Use parallel mode** to speed up re-runs: `SCRIPT_PARALLEL_INGESTION=true`
 
 **Selective Recovery**:
 
 ```bash
 # Skip completed data imports and only reprocess schemas
-./setup/data-sources/schemas/physical/process-physical-schemas.sh --all
-./setup/data-sources/schemas/cultural/process-cultural-schemas.sh --all
+rbt schema run --all
 
 # Re-import only specific reference datasets
-./setup/data-sources/reference-data/import-geonames.sh
+rbt import geonames
 
-# Preserve temp files for investigation using standardized variable
-SCRIPT_CLEAN_TEMP_FILES=false ./setup/data-sources/reference-data/import-buildings.sh
+# Preserve temp files for investigation
+SCRIPT_CLEAN_TEMP_FILES=false rbt import buildings
 
 # Enable parallel processing to speed up re-runs
-SCRIPT_PARALLEL_INGESTION=true ./setup/data-sources/reference-data/import-reference-data.sh
+SCRIPT_PARALLEL_INGESTION=true rbt import reference
 ```
 
 ## 🔍 Validation
@@ -505,61 +489,30 @@ SCRIPT_PARALLEL_INGESTION=true ./setup/data-sources/reference-data/import-refere
 After setup completion, validate the installation:
 
 ```bash
-# Check database schemas and tables
-psql "host=$PG_HOST dbname=rbt user=$PG_USR password=$PG_PASS" -c "\dn+"  # List schemas
-psql "host=$PG_HOST dbname=rbt user=$PG_USR password=$PG_PASS" -c "\dt+ rbt.*"  # List RBT tables
+# Full validation: config, tools, database, extensions, schemas, disk, memory
+rbt validate
 
-# Check materialized views
-psql "host=$PG_HOST dbname=rbt user=$PG_USR password=$PG_PASS" -c "\dm+ rbt.*"  # List materialized views
+# End-to-end sanity check (validate, bootstrap, schemas, tile dry-runs)
+rbt smoke
 
-# Validate data integrity (if available)
-./tools/health-check.sh
+# Inspect schemas and views manually
+psql "host=$DATABASE_HOST dbname=rbt user=$DATABASE_USER password=$DATABASE_PASSWORD" -c "\dn+"      # List schemas
+psql "host=$DATABASE_HOST dbname=rbt user=$DATABASE_USER password=$DATABASE_PASSWORD" -c "\dt+ rbt.*"  # List RBT tables
+psql "host=$DATABASE_HOST dbname=rbt user=$DATABASE_USER password=$DATABASE_PASSWORD" -c "\dm+ rbt.*"  # List materialized views
 
 # Test tile generation
-./production/generate-tiles.sh --dry-run
-```
-
-## 🔧 Schema Processing Details
-
-### Wrapper Scripts
-
-The schema processing has been modularized with wrapper scripts for easier management:
-
-**Physical Layer Processing** (`process-physical-schemas.sh`):
-
-```bash
-# Process all physical layers
-./process-physical-schemas.sh --all
-
-# Process individual layers
-./process-physical-schemas.sh --physical    # Core physical features  
-./process-physical-schemas.sh --landcover  # Land cover classification
-./process-physical-schemas.sh --water      # Water features and waterways
-./process-physical-schemas.sh --contour    # Terrain and elevation contours
-```
-
-**Cultural Layer Processing** (`process-cultural-schemas.sh`):
-
-```bash
-# Process all cultural layers
-./process-cultural-schemas.sh --all
-
-# Process individual layers
-./process-cultural-schemas.sh --cultural   # Core cultural features
-./process-cultural-schemas.sh --highway    # Road and highway networks
-./process-cultural-schemas.sh --railway    # Railway systems and stations
-./process-cultural-schemas.sh --aero       # Aviation infrastructure
+rbt tiles --all --dry-run
 ```
 
 ## 📝 Next Steps
 
 After successful setup:
 
-1. **Start OSM updates**: `./production/update-osm.sh run &`
-2. **Generate initial tiles**: `./production/generate-tiles.sh --all`
+1. **Start OSM updates**: `rbt osm run` (or `docker compose --profile production up -d rbt-osm-updates`)
+2. **Generate initial tiles**: `rbt tiles --all`
 3. **Schedule tile regeneration**: Set up cron jobs or automated triggers
 
-The setup phase is now complete! All future operations use scripts in the `production/` directory.
+The setup phase is now complete! All future operations use the `rbt` commands described in the [production documentation](production-readme.md).
 
 ## 📚 Related Documentation
 

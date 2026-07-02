@@ -2,8 +2,14 @@
 set -euo pipefail
 
 # =============================================================================
-# RBT Vector Tiles Generation Script
+# RBT Vector Tiles Generation Script — DEPRECATED
 # =============================================================================
+# DEPRECATED: the Python engine (`rbt tiles`) is the primary tile generator.
+# This script and the generators under production/tile-generation/ are kept
+# only as the `rbt tiles --mode bash` escape hatch until a real-data parity
+# check (see docs/parity-runbook.md) confirms the native output, after which
+# they will be removed. Do not add new layers here — extend config/layers.yml.
+#
 # This script generates vector tiles from the prepared RBT database.
 # It supports multiple projections and selective layer generation.
 # =============================================================================
@@ -15,29 +21,11 @@ readonly PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly START_TIME=$(date +%s)
 readonly TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
-# Source configuration
-readonly CONFIG_FILE="${PROJECT_ROOT}/config/rbt.conf"
-if [[ -f "$CONFIG_FILE" ]]; then
-    source "$CONFIG_FILE"
-else
-    echo "ERROR: Configuration file not found: $CONFIG_FILE" >&2
-    exit 1
-fi
+source "${PROJECT_ROOT}/scripts/lib/config.sh"
+rbt_config_load
 
-# Resolve database configuration to allow environment overrides after sourcing config
-: "${DATABASE_HOST:=${PG_HOST:-localhost}}"
-: "${DATABASE_PORT:=${PG_PORT:-5432}}"
-: "${DATABASE_NAME:=${PG_DATABASE:-rbt}}"
-: "${DATABASE_USER:=${PG_USR:-postgres}}"
-: "${DATABASE_PASSWORD:=${PG_PASS:-}}"
-
-# Keep legacy PG_* variables in sync for downstream tooling
-export PG_HOST="${PG_HOST:-${DATABASE_HOST}}"
-export PG_PORT="${PG_PORT:-${DATABASE_PORT}}"
-export PG_USR="${PG_USR:-${DATABASE_USER}}"
-export PG_PASS="${PG_PASS:-${DATABASE_PASSWORD}}"
-
-readonly RBT_DB_CONN="host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=${DATABASE_NAME} user=${DATABASE_USER} password=${DATABASE_PASSWORD}"
+RBT_DB_CONN="$(rbt_psql_conn_string)"
+readonly RBT_DB_CONN
 
 # Configuration
 readonly LOG_DIR="${SHARED_LOG_DIR:-${PROJECT_ROOT}/output/logs}"
@@ -57,7 +45,7 @@ VERBOSE=false
 DRY_RUN=false
 TILE_JOIN=true
 ADD_BTIS=true
-TEMP_DIR="${TILE_TEMP_DIR:-/mnt/data}"
+TEMP_DIR="${TILE_TEMP_DIR:-/tmp/tiles}"
 BTP_SCHEMA_VERSION="1.0.0"
 
 # Layer-specific selection flags for cultural
@@ -241,6 +229,7 @@ parse_arguments() {
                 shift 2
                 ;;
             --verbose|-v)
+                # shellcheck disable=SC2034  # accepted for CLI compatibility
                 VERBOSE=true
                 shift
                 ;;
@@ -624,7 +613,7 @@ main() {
     # Validate environment
     if ! psql "${RBT_DB_CONN}" -c "SELECT 1" >/dev/null 2>&1; then
         log "ERROR" "Cannot connect to RBT database. Please ensure database is initialized."
-        log "ERROR" "Run: ./setup/init-database.sh"
+        log "ERROR" "Run: rbt setup --all"
         exit 1
     fi
     

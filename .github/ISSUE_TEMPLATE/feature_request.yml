@@ -1,0 +1,33 @@
+name: Feature request
+description: Propose an improvement or new capability.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What can't you do today, or what is harder than it should be?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Affected areas
+      options:
+        - label: rbt CLI / orchestration (src/rbt)
+        - label: Layer registry (config/layers.yml)
+        - label: Data importers (setup/data-sources)
+        - label: Database schema SQL
+        - label: Docker / deployment
+        - label: Documentation

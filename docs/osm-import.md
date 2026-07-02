@@ -2,26 +2,102 @@
 
 ## Overview
 
-This directory contains the infrastructure for importing and maintaining OpenStreetMap (OSM) data into a PostGIS-enabled PostgreSQL database using Imposm3. The pipeline is designed for large-scale, production-ready OSM data processing with support for continuous updates.
+This page documents the import and continuous maintenance of OpenStreetMap
+(OSM) data in the PostGIS database using Imposm3. There are two entry points:
+
+- **`rbt import osm`** — one-time planet import (download → diff merge →
+  imposm import), delegating to the Bash leaf script
+  `setup/data-sources/osm/import-osm-data.sh` (see its `CONTRACT` header).
+  Also runs as part of `rbt setup --all`.
+- **`rbt osm run`** — continuous daily updates. The CLI natively supervises
+  `imposm run` (no bash involved); `rbt osm status` and `rbt osm stop` manage
+  the supervisor.
 
 ## Table of Contents
 
 1. [Architecture](#architecture)
-2. [Tools and Technologies](#tools-and-technologies)
-3. [Configuration Files](#configuration-files)
-4. [Database Schema](#database-schema)
-5. [Processing Workflow](#processing-workflow)
-6. [Script Features](#script-features)
-7. [Usage](#usage)
+2. [Entry Points](#entry-points)
+3. [Tools and Technologies](#tools-and-technologies)
+4. [Configuration Files](#configuration-files)
+5. [Database Schema](#database-schema)
+6. [Processing Workflow](#processing-workflow)
+7. [Script Features](#script-features)
 8. [Monitoring and Health Checks](#monitoring-and-health-checks)
 
 ## Architecture
 
 The system follows a multi-stage pipeline architecture:
 
-```text
-OSM Planet File → Download → Diff Application → Import → PostGIS Database → Continuous Updates
+```mermaid
+flowchart LR
+    A["OSM Planet File"] --> B["Download<br/>(aria2c)"]
+    B --> C["Diff Merge + Apply<br/>(osmium / osmosis)"]
+    C --> D["Import<br/>(imposm3)"]
+    D --> E[("PostGIS Database")]
+    E --> F["Continuous Updates<br/>(rbt osm run)"]
+    F --> E
 ```
+
+## Entry Points
+
+### One-time import
+
+=== "rbt CLI"
+
+    ```bash
+    # Full workflow: download planet, diffs, merge, apply, import
+    rbt import osm
+
+    # Pass stage flags through to the leaf script (after `--`)
+    rbt import osm -- --download-planet
+    rbt import osm -- --download-diffs 713 730
+    rbt import osm -- --import
+
+    # Preview without executing
+    rbt import osm --dry-run
+    ```
+
+=== "Docker Compose"
+
+    ```bash
+    # OSM import runs as part of the setup profile (`rbt setup --all`)
+    docker compose --profile setup up rbt-setup
+
+    # Or run just the OSM step inside the image
+    docker compose run --rm rbt-setup rbt setup --import-osm-data
+    ```
+
+### Continuous updates
+
+=== "rbt CLI"
+
+    ```bash
+    # Start the supervisor (blocks; run under systemd or a container)
+    rbt osm run
+
+    # Is it running, and when was the last applied change?
+    rbt osm status
+
+    # Stop gracefully (SIGTERM, escalating to SIGKILL after 30s)
+    rbt osm stop
+    ```
+
+=== "Docker Compose"
+
+    ```bash
+    # The production profile runs `rbt osm run` as the
+    # rbt-osm-updates container's main process
+    docker compose --profile production up -d rbt-osm-updates
+
+    docker compose exec rbt-osm-updates rbt osm status
+    docker compose stop rbt-osm-updates
+    ```
+
+!!! note "Replaced script"
+    `rbt osm run|status|stop` replaces the former `production/update-osm.sh`.
+    The supervisor tracks its child through a pidfile
+    (`$SHARED_TEMP_DIR/imposm-run.pid`) instead of the old
+    `pkill -f "imposm.*run"`, which could match unrelated processes.
 
 ## Tools and Technologies
 
@@ -89,7 +165,8 @@ osmosis --read-xml-change file="osm.osc.gz" \
 - Generalization support for multi-scale rendering
 - Continuous replication support
 
-**Commands Used**:
+**Commands Used** (the first by `rbt import osm` via the leaf script, the
+second supervised directly by `rbt osm run`):
 
 ```bash
 # Initial import
@@ -105,7 +182,7 @@ imposm run -config config.json
 
 **Database Configuration**:
 
-- Host: 10.232.234.30
+- Host: value of `DATABASE_HOST` (e.g. `localhost`, or the `postgres` Compose service)
 - Database: rbt
 - SRID: 4326 (WGS84 coordinate system)
 - No table prefix (prefix=NONE)
@@ -115,6 +192,8 @@ imposm run -config config.json
 ### imposm-config.json
 
 Located at: `setup/data-sources/osm/imposm-config.json`
+(override via `OSM_CONFIG_FILE` in `config/rbt.conf` — `rbt osm run` resolves
+the same setting)
 
 ```json
 {
@@ -351,14 +430,16 @@ The mapping creates 30+ specialized tables, each optimized for specific geograph
 - Builds spatial indexes
 - Optimizes database for queries
 
-### 6. **Continuous Updates**
+### 6. **Continuous Updates** (`rbt osm run`)
 
-- Runs imposm in continuous mode
-- Checks for updates every 24 hours
-- Applies incremental changes
-- Maintains database currency
+- The CLI supervises `imposm run` in the foreground
+- imposm checks for updates every 24 hours and applies incremental changes
+- SIGTERM/SIGINT are forwarded to imposm with a 30-second grace period
+- Pidfile at `$SHARED_TEMP_DIR/imposm-run.pid` prevents double-starting
 
 ## Script Features
+
+These apply to the `import-osm-data.sh` leaf script behind `rbt import osm`:
 
 ### Error Handling
 
@@ -383,59 +464,58 @@ The mapping creates 30+ specialized tables, each optimized for specific geograph
 
 ### Configuration Options
 
-```bash
-# Environment variables
-LOG_FILE           # Log file location
-DATA_DIR           # Data storage directory
-CONFIG_FILE        # Imposm config file
-MAX_RETRIES        # Retry attempts (default: 3)
-RETRY_DELAY        # Delay between retries (default: 10s)
-CLEANUP_ON_EXIT    # Remove temp files (default: true)
-VALIDATE_DOWNLOADS # Validate file integrity (default: true)
-HEALTH_CHECK_PORT  # Health check port (default: 8080)
-```
-
-## Usage
-
-### Basic Execution
+Set in `config/rbt.conf` (the `OSM_*` section) or override via environment:
 
 ```bash
-./setup/data-sources/osm/import-osm-data.sh
+OSM_LOG_FILE        # Log file location
+OSM_DATA_DIR        # Data storage directory (default: /mnt/data)
+OSM_CONFIG_FILE     # Imposm config file
+OSM_MAPPING_FILE    # Imposm mapping file
+OSM_CACHE_DIR       # Imposm cache directory
+OSM_DIFF_DIR        # Downloaded OSC diffs
+DIFF_START_SEQ      # Default diff start sequence (713)
+DIFF_END_SEQ        # Default diff end sequence (730)
+OSM_CLEANUP_ON_EXIT # Remove temp files (default: true)
+OSM_VALIDATE_DOWNLOADS # Validate file integrity (default: true)
+OSM_MIN_PBF_SIZE_MB # Minimum PBF size in MB for the import-stage size check (default: 10)
 ```
 
-### Custom Configuration
-
-```bash
-DATA_DIR=/custom/path CONFIG_FILE=custom.json ./setup/data-sources/osm/import-osm-data.sh
-```
-
-### Docker/Container Usage
-
-```bash
-docker run -v /data:/mnt/data \
-           -e DATA_DIR=/mnt/data \
-           -e CONFIG_FILE=/app/config.json \
-           imposm-processor
-```
+See [configuration.md](configuration.md) for the full reference.
 
 ## Monitoring and Health Checks
 
+### Update Supervisor Status
+
+```bash
+rbt osm status
+```
+
+Reports whether the supervisor is running (via its pidfile) and queries
+`imposm3_log` for the last applied OSM change. Exits non-zero when updates
+are not running, so it slots directly into monitoring scripts.
+
 ### Health Check Endpoint
 
-The script starts a health check server on port 8080 (configurable) that responds with HTTP 200 OK. This is useful for:
+During a one-time import, the leaf script starts a health check server on port 8080 (configurable) that responds with HTTP 200 OK. This is useful for:
 
 - Container orchestration (Kubernetes, Docker Swarm)
 - Load balancer health checks
 - Monitoring systems
 
+For the running system, `rbt health` (the Docker HEALTHCHECK command)
+verifies a database round-trip.
+
 ### Log Analysis
 
-Monitor the log file for:
+Monitor the log file (default `output/logs/osm_import.log`) for:
 
 - Progress indicators: `[INFO] Progress: <task> [current/total] (percent%)`
 - Errors: `[ERROR]` prefixed messages
 - Warnings: `[WARN]` prefixed messages
 - Timing: Duration reports for each major operation
+
+`rbt osm run` streams imposm output into its own log
+(`output/logs/rbt_<timestamp>.log` by default).
 
 ### Database Validation
 
@@ -464,13 +544,12 @@ WHERE schemaname = 'public'
 1. **Insufficient Disk Space**
 
    - Ensure at least 70GB free space
-   - Check both DATA_DIR and temporary directories
+   - Check both `OSM_DATA_DIR` and temporary directories
 
 2. **Connection Failures**
 
-   - Verify PostgreSQL connectivity
-   - Check PostGIS extension is installed
-   - Ensure database credentials are correct
+   - Run `rbt validate` to verify PostgreSQL connectivity and extensions
+   - Ensure database credentials are correct in `config/rbt.conf`
 
 3. **Memory Issues**
 

@@ -9,86 +9,111 @@ RBT Vector Tiles is designed as a two-phase system:
 1. **Setup Phase**: One-time initialization of the database with global datasets
 2. **Production Phase**: Continuous OSM updates and on-demand tile generation
 
+Both phases are driven by a single entry point — the Python `rbt` CLI
+(`src/rbt/`, [reference](cli.md)). The CLI orchestrates the bash data
+importers, runs the schema SQL, supervises continuous OSM updates, and
+dispatches one of **two native tile backends** depending on the target
+projection:
+
 ```mermaid
 graph TD
-    subgraph "Setup Phase (One-time)"
-        A[OSM Planet Data] --> B[Imposm3 Import]
-        C[FieldMaps Data] --> D[Reference Data Import]
-        E[Natural Earth] --> D
-        F[GeoNames] --> D
-        G[Overture Buildings] --> D
-        B --> H[PostgreSQL + PostGIS]
-        D --> H
-        H --> I[Schema Processing]
-        I --> J[Optimized Views & Indexes]
+    CLI["rbt CLI — the only orchestrator<br/>(src/rbt/)"]
+
+    subgraph importers["Data importers — bash leaf scripts (rbt import …)"]
+        OSM["osm<br/>planet PBF via imposm3"]
+        REF["reference<br/>Natural Earth, FieldMaps, OurAirports"]
+        GEO["geonames<br/>NGA GNS names"]
+        BLD["buildings<br/>Overture footprints"]
     end
-    
-    subgraph "Production Phase (Continuous)"
-        K[OSM Daily Diffs] --> L[Imposm3 Updates]
-        L --> J
-        J --> M[Tile Generation]
-        M --> N[Vector Tiles Output]
-        O[Scheduled/Manual Trigger] --> M
+
+    DB[("PostgreSQL + PostGIS<br/>import / reference schemas")]
+    SCHEMA["rbt schema run<br/>PL/pgSQL units via psql"]
+    VIEWS[("rbt.* views &<br/>materialized views")]
+    UPD["rbt osm run<br/>imposm diff supervisor"]
+
+    subgraph tiles["rbt tiles — two native backends"]
+        MERC["EPSG:3857 / 3395<br/>ogr2ogr → FlatGeoBuf → tippecanoe<br/>→ tile-join → MBTiles + BTIS"]
+        MVT["EPSG:4326<br/>single ogr2ogr -f MVT (GDAL driver)<br/>→ tile directory + metadata.json"]
     end
+
+    CLI --> importers
+    CLI --> SCHEMA
+    CLI --> UPD
+    CLI --> tiles
+    OSM --> DB
+    REF --> DB
+    GEO --> DB
+    BLD --> DB
+    UPD -->|daily diffs| DB
+    SCHEMA --> VIEWS
+    DB --> VIEWS
+    VIEWS --> MERC
+    VIEWS --> MVT
 ```
+
+### Orchestration Rule (the "hybrid" architecture)
+
+The dispatch rule is strict and one-directional:
+
+- The `rbt` CLI is the **only** orchestrator. No bash script calls Python,
+  and no bash script calls another bash script.
+- Four data importers remain bash **leaf scripts** by design (download +
+  load of external datasets, reached via `rbt import {osm,reference,geonames,buildings}`).
+  Each carries a `CONTRACT` header documenting its inputs and environment.
+- Everything else — database bootstrap, schema processing, OSM update
+  supervision, tile generation, health checks — is native Python under
+  `src/rbt/`.
+- The bash tile generators under `production/` are **deprecated**, reachable
+  only through the `rbt tiles --mode bash` escape hatch until the
+  [parity runbook](parity-runbook.md) retires them.
 
 ## 📂 Directory Architecture
 
 ### Separation of Concerns
 
-The project is organized around operational phases:
+The project is organized around the orchestrator/leaf split. See the
+[Project Tour](project-structure.md#repository-layout) for the full annotated
+directory tree — kept in one place so it can't drift between documents; the
+summary here is just the shape of the split:
 
-```
-rbt-vector-tiles/
-├── setup/           # One-time initialization (run once)
-│   ├── init-database.sh          # Main setup orchestrator
-│   ├── data-sources/             # Data import scripts
-│   │   ├── osm/                  # OpenStreetMap import
-│   │   ├── reference-data/       # Reference datasets
-│   │   └── schemas/              # Database schema processing
-│   └── README.md                 # Setup documentation
-├── production/      # Continuous operations (run repeatedly)
-│   ├── generate-tiles.sh         # Main tile generation orchestrator  
-│   ├── update-osm.sh             # OSM continuous updates
-│   ├── tile-generation/          # Projection-specific scripts
-│   └── README.md                 # Production documentation
-├── config/          # Configuration management
-│   └── rbt.conf                  # Centralized configuration
-├── tools/           # Utilities and maintenance
-│   ├── validate-environment.sh   # Environment validation
-│   ├── health-check.sh           # System health monitoring
-│   └── ...                       # Other utility scripts
-├── docs/            # Documentation
-│   ├── getting-started.md        # Setup walkthrough
-│   ├── architecture.md           # This document
-│   └── ...                       # Layer-specific documentation
-└── output/          # Generated outputs
-    ├── tiles/                    # Vector tiles by projection
-    ├── logs/                     # Processing logs
-    └── temp/                     # Temporary processing files
-```
+- **`src/rbt/`** — the Python CLI, the *only* orchestrator (`cli.py` +
+  `commands/` for the Typer surface, `tiles/` for the two tile-generation
+  backends, `importers/` for the bash-leaf wrappers).
+- **`setup/data-sources/`** — the four bash leaf importers + PL/pgSQL schema
+  sources.
+- **`production/`** — deprecated bash tile generators, reachable only via
+  `rbt tiles --mode bash` until the [parity runbook](parity-runbook.md)
+  retires them.
+- **`config/`** — `rbt.conf`, `layers.yml`, and the service configs
+  (`postgresql.conf`, `tile-server.json`, `prometheus.yml`).
+- **`tests/`**, **`docs/`**, **`output/`** — pytest suite, this MkDocs site,
+  and generated artifacts (gitignored), respectively.
 
-### Setup Phase (`setup/`)
+### Setup Phase (`rbt setup`)
 
 **Purpose**: Initialize a fresh RBT database from scratch
 
 **Key Components**:
-- `init-database.sh` - Main orchestration script
-- `data-sources/` - Data import scripts organized by source type
-- `schemas/` - SQL schema processing scripts
+- `src/rbt/setup_db.py` - Creates the database and extensions via psycopg,
+  then sequences the steps in dependency order
+- `setup/data-sources/` - Bash leaf importers organized by source type
+- `setup/data-sources/schemas/` - PL/pgSQL files run by `rbt schema run`
 
 **Execution Pattern**: Run once when setting up a new system
+(`rbt setup --all`, or individual step flags to resume)
 
-### Production Phase (`production/`)
+### Production Phase (`rbt osm run` / `rbt tiles`)
 
 **Purpose**: Continuous operations on an initialized database
 
 **Key Components**:
-- `generate-tiles.sh` - Main tile generation orchestrator
-- `update-osm.sh` - Continuous OSM updates
-- `tile-generation/` - Projection-specific tile generation scripts
+- `rbt tiles` - Native tile generation engine (`src/rbt/tiles/`)
+- `rbt osm run` - Continuous OSM updates (supervised `imposm run`)
+- `production/tile-generation/` - Deprecated bash generators, kept only for
+  the `--mode bash` escape hatch
 
-**Execution Pattern**: Run continuously or on-demand
+**Execution Pattern**: Run continuously or on-demand — see the
+[Operations Guide](operations.md) for the Compose profiles and runbooks
 
 ## 🔄 Data Flow Architecture
 
@@ -97,18 +122,19 @@ rbt-vector-tiles/
 ```mermaid
 sequenceDiagram
     participant User
-    participant Setup as setup/init-database.sh
-    participant OSM as OSM Import
-    participant Ref as Reference Data
+    participant Setup as rbt setup --all
+    participant OSM as rbt import osm
+    participant Ref as rbt import reference/geonames/buildings
     participant DB as PostgreSQL
-    participant Schema as Schema Processing
+    participant Schema as rbt schema run
     
-    User->>Setup: ./setup/init-database.sh
-    Setup->>OSM: Import OSM planet data
+    User->>Setup: rbt setup --all
+    Setup->>DB: CREATE DATABASE + EXTENSIONS (psycopg)
+    Setup->>OSM: Import OSM planet data (bash leaf → imposm3)
     OSM->>DB: Raw OSM tables (import schema)
-    Setup->>Ref: Import reference datasets
+    Setup->>Ref: Import reference datasets (bash leaves)
     Ref->>DB: Reference tables (multiple schemas)
-    Setup->>Schema: Process database schemas
+    Setup->>Schema: psql -v ON_ERROR_STOP=1 -f <unit>.sql
     Schema->>DB: Optimized views (rbt schema)
 ```
 
@@ -116,18 +142,18 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Updates as OSM Updates
+    participant Updates as rbt osm run (imposm supervisor)
     participant DB as PostgreSQL
-    participant TileGen as Tile Generation
-    participant Output as Vector Tiles
+    participant TileGen as rbt tiles
+    participant Output as output/tiles/
     
     loop Continuous Updates
-        Updates->>DB: Apply OSM diffs
+        Updates->>DB: Apply OSM diffs (import schema)
     end
     
     loop On-Demand/Scheduled
-        TileGen->>DB: Query optimized views
-        TileGen->>Output: Generate tiles (3857/3395/4326)
+        TileGen->>DB: Query optimized rbt.* views
+        TileGen->>Output: MBTiles (3857/3395) + tile directory (4326)
     end
 ```
 
@@ -171,29 +197,41 @@ import.water (raw OSM)
 
 | Projection | EPSG Code | Use Case | Tool Chain |
 |------------|-----------|----------|------------|
-| Web Mercator | 3857 | Standard web mapping | PostgreSQL → FlatGeoBuf → Tippecanoe → MBTiles |
-| World Mercator | 3395 | Better area preservation | PostgreSQL → FlatGeoBuf → Tippecanoe → MBTiles + BTIS |
-| Geographic | 4326 | Latitude/longitude | PostgreSQL → Direct MVT via GDAL |
+| Web Mercator | 3857 | Standard web mapping | PostgreSQL → FlatGeoBuf → Tippecanoe → MBTiles (+ BTIS metadata) |
+| World Mercator | 3395 | Better area preservation | PostgreSQL → FlatGeoBuf → Tippecanoe → MBTiles (+ BTIS metadata) |
+| Geographic | 4326 | Latitude/longitude | PostgreSQL → GDAL MVT driver → tile directory (no tippecanoe) |
 
 ### Tile Generation Workflow
 
+`TileEngine` (`src/rbt/tiles/engine.py`) reads the declarative layer registry
+in `config/layers.yml` and selects the backend per projection:
+
 ```mermaid
 graph LR
-    subgraph "EPSG:3857/3395 Pipeline"
-        A[PostgreSQL Views] --> B[ogr2ogr Export]
-        B --> C[FlatGeoBuf Files]
-        C --> D[Tippecanoe Processing]
-        D --> E[Individual MBTiles]
-        E --> F[tile-join Merge]
-        F --> G[Consolidated MBTiles]
+    A[("rbt.* views")]
+
+    subgraph "EPSG:3857 / 3395 — tippecanoe backend"
+        B["ogr2ogr export<br/>per layer"] --> C["FlatGeoBuf cache<br/>*.fgb"]
+        C --> D["tippecanoe<br/>per layer"] --> E["Per-layer MBTiles"]
+        E --> F["tile-join merge"] --> G["type_projection.mbtiles<br/>+ BTIS metadata"]
     end
     
-    subgraph "EPSG:4326 Pipeline"
-        A --> H[ogr2ogr MVT Driver]
-        H --> I[Direct PBF Tiles]
-        I --> J[Directory Structure]
+    subgraph "EPSG:4326 — GDAL-MVT backend"
+        H["single multi-table<br/>ogr2ogr -f MVT<br/>(CONF json: per-table zoom windows)"]
+        H --> I["tile directory<br/>{z}/{x}/{y}.pbf + metadata.json"]
     end
+
+    A --> B
+    A --> H
 ```
+
+!!! note "Why two backends?"
+    Tippecanoe only understands Web-Mercator-family tiling, so the EPSG:4326
+    dataset is cut directly from PostGIS by GDAL's MVT driver in **one**
+    multi-table `ogr2ogr` call. Its `CONF` json maps zoom-variant view
+    families (e.g. `rbt.contour_z8` … `rbt.contour`) onto a single target MVT
+    layer with per-table zoom windows. The output is a tile *directory*, not
+    an MBTiles file, and tile-join/BTIS do not apply.
 
 ### Layer Processing Strategy
 
@@ -218,13 +256,21 @@ All configuration is centralized in the `config/` directory:
 
 ```
 config/
-└── rbt.conf              # Single configuration file with all settings
-    ├── Database connection and performance
-    ├── Processing parameters and limits  
-    ├── OSM import configuration
-    ├── Tile generation settings
-    └── Resource limits and health checks
+├── rbt.conf              # Runtime settings (database, processing, tile generation)
+├── layers.yml            # Declarative layer registry: layers, schema SQL units,
+│                         #   and the gdal_mvt (EPSG:4326) dataset definitions
+├── postgresql.conf       # PostgreSQL server tuning (mounted into the postgres container)
+├── tile-server.json      # TileServer-GL data sources
+└── prometheus.yml        # Prometheus scrape configuration
 ```
+
+The CLI loads `rbt.conf` into an immutable `Settings` object
+(`src/rbt/config.py`) with the precedence **CLI overrides → environment
+variables → `config/rbt.conf` → built-in defaults**. Loading settings never
+mutates the process environment; values destined for child processes (psql,
+ogr2ogr, the bash leaf scripts) are passed explicitly as a bundled
+`PG*`/`PG_*`/`DATABASE_*` environment. See the
+[Configuration Reference](configuration.md) for every variable.
 
 The `rbt.conf` file is organized into logical sections:
 
@@ -263,22 +309,20 @@ export MAX_PARALLEL_JOBS=8
 
 ### Container Strategy
 
-Three specialized containers:
+Two images cover every role:
 
-1. **Setup Container** (`Dockerfile.setup`):
-   - Heavy dependencies for data processing
-   - One-time database initialization
-   - Ephemeral - removed after setup
+1. **RBT Image** (`Dockerfile.production`, multi-stage):
+   - GDAL/OGR, PostgreSQL client, tippecanoe (built from the felt fork),
+     imposm3, and the `rbt` CLI installed in a venv on `PATH`
+   - A single image backs `rbt-setup`, `rbt-osm-updates`, `rbt-tiles`, and
+     `rbt-smoke` — the Compose `command:` selects the role
+     (`rbt setup --all`, `rbt osm run`, `rbt tiles --all`, `rbt smoke`)
+   - `HEALTHCHECK` runs `rbt health`
 
-2. **Production Container** (`Dockerfile.production`):
-   - Lightweight runtime dependencies
-   - Continuous OSM updates
-   - On-demand tile generation
-
-3. **Database Container** (`postgis/postgis`):
+2. **Database Container** (`postgis/postgis`):
    - PostgreSQL with PostGIS extensions
-   - Persistent data storage
-   - Optimized configuration
+   - Persistent data storage (`postgres_data` volume)
+   - Tuned via `config/postgresql.conf`
 
 ### Orchestration
 
@@ -286,35 +330,48 @@ Docker Compose profiles enable different deployment modes:
 
 ```bash
 # Setup phase
-docker-compose --profile setup up
+docker compose --profile setup up rbt-setup
 
 # Production phase  
-docker-compose --profile production up -d
+docker compose --profile production up -d
 
 # With tile serving
-docker-compose --profile production --profile serve up -d
+docker compose --profile production --profile serve up -d
 ```
+
+The full profile cookbook, OSM daemon lifecycle, and maintenance runbooks
+live in the [Operations Guide](operations.md).
 
 ## 🔍 Monitoring Architecture
 
 ### Logging Strategy
 
-Structured logging with different levels:
+Every mutating `rbt` invocation tees its output to a timestamped file under
+`SHARED_LOG_DIR`:
 
 ```
 output/logs/
-├── database_init_*.log     # Setup phase logs
-├── tile_generation_*.log   # Tile generation logs
-├── osm_updates_*.log       # OSM update logs
-└── system_metrics_*.log    # Performance metrics
+├── rbt_<timestamp>.log            # Per-invocation CLI log (--log-file overrides)
+├── schema_<key>_<timestamp>.log   # psql output per schema unit
+└── osm_import.log                 # Planet import leaf script
+
+output/tiles/<type>/<projection>/
+├── <layer>_<projection>.log       # Per-layer export + tippecanoe log
+├── merge_<projection>.log         # tile-join log
+└── <type>_4326_mvt.log            # GDAL-MVT backend log
 ```
 
 ### Error Handling
 
-- **Graceful degradation**: Continue processing even if some components fail
-- **Retry mechanisms**: Automatic retry with exponential backoff
-- **State preservation**: Transactions ensure partial work is saved
-- **Recovery procedures**: Clear steps for common failure scenarios
+- **Retry mechanisms**: Network-bound exports retry with a configurable
+  count/delay (`RETRY_COUNT`/`RETRY_DELAY`)
+- **Fail fast on SQL**: Schema units run with `psql -v ON_ERROR_STOP=1`, so a
+  failing statement aborts that unit instead of silently continuing
+- **Supervised updates**: `rbt osm run` forwards SIGTERM/SIGINT to imposm and
+  escalates to SIGKILL after a 30 s grace period
+- **Health probes**: `rbt health` backs the Docker `HEALTHCHECK`;
+  `rbt validate` and `rbt smoke` cover pre-flight and end-to-end checks
+  (see the [Operations Guide](operations.md))
 
 ### Performance Optimization
 
@@ -331,17 +388,19 @@ output/logs/
    - Smart feature selection and filtering
 
 3. **Tile Generation Level**:
-   - Parallel tile generation across projections
-   - Efficient intermediate formats (FlatGeoBuf)
-   - Optimized tippecanoe parameters
-   - Tile consolidation and compression
+   - Multi-core tippecanoe processing (`-P` parallel input reading)
+   - Efficient cached intermediate formats (FlatGeoBuf)
+   - Per-layer tippecanoe parameters from the registry (`config/layers.yml`)
+   - Tile consolidation (tile-join) and compression
 
 ## 📚 Related Documentation
 
 - **[← Back to Home](index.md)**
 - **[Getting Started Guide](getting-started.md)** - Setup walkthrough and first steps
+- **[Operations Guide](operations.md)** - Day-2 runbooks: profiles, OSM daemon, maintenance
+- **[`rbt` CLI Reference](cli.md)** - The full command surface
+- **[Configuration Reference](configuration.md)** - `rbt.conf` and environment variables
 - **[Physical Layers](physical-layers.md)** - Natural feature processing
 - **[Cultural Layers](cultural-layers.md)** - Human infrastructure processing
 - **[Database Initialization](database-initialization.md)** - Database setup process
-- **[Setup Documentation](setup-readme.md)** - Detailed setup information
-- **[Production Documentation](production-readme.md)** - Continuous operations
+- **[Parity Runbook](parity-runbook.md)** - Retiring the deprecated bash tile generators

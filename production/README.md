@@ -1,287 +1,207 @@
 # Production Operations
 
-This directory contains scripts for continuous operations on an initialized RBT database. These scripts handle OSM updates and vector tile generation.
+Continuous operations on an initialized RBT database: keeping OSM data current with `rbt osm run` and generating vector tiles with `rbt tiles`. Both are native `rbt` CLI commands — the Bash scripts that remain in this directory are a **deprecated escape hatch** (see [Deprecated Bash Generators](#deprecated-bash-generators)).
 
 ## ⚠️ Prerequisites
 
-Before using these scripts, ensure:
+Before running production operations, ensure:
 
-- ✅ Database has been initialized using `./setup/init-database.sh`
-- ✅ Environment variables are configured (see `config/rbt.conf`)
-- ✅ Required tools are installed (tippecanoe, ogr2ogr, imposm)
+- ✅ Database has been initialized with `rbt setup --all` (see [setup documentation](setup-readme.md))
+- ✅ Configuration is in place (see `config/rbt.conf`) — verify with `rbt validate`
+- ✅ Required tools are installed (tippecanoe, tile-join, ogr2ogr, imposm)
 
 ## 🎯 Main Operations
 
 ### 1. OSM Updates (Continuous)
 
-Keep OSM data current with daily updates:
+Keep OSM data current with daily updates. The CLI natively supervises `imposm run` (no bash involved), forwarding SIGTERM/SIGINT with a 30-second grace period and tracking the child via a pidfile in `$SHARED_TEMP_DIR`.
 
-```bash
-# Start continuous updates (runs indefinitely) - DEFAULT COMMAND
-./production/update-osm.sh
-./production/update-osm.sh run
+=== "rbt CLI"
 
-# Run in background
-nohup ./production/update-osm.sh run > osm-updates.log 2>&1 &
+    ```bash
+    # Start continuous updates (blocks until stopped)
+    rbt osm run
 
-# Check status
-./production/update-osm.sh status
+    # Check status (running? last applied OSM change?)
+    rbt osm status
 
-# Stop updates
-./production/update-osm.sh stop
+    # Stop updates gracefully
+    rbt osm stop
 
-# Show help
-./production/update-osm.sh --help
-```
+    # Preview the imposm command without starting
+    rbt osm run --dry-run
+    ```
+
+=== "Docker Compose"
+
+    ```bash
+    # The production profile runs `rbt osm run` as the
+    # rbt-osm-updates container's main process
+    docker compose --profile production up -d rbt-osm-updates
+
+    docker compose exec rbt-osm-updates rbt osm status
+    docker compose stop rbt-osm-updates
+    ```
 
 ### 2. Tile Generation (On-Demand)
 
-Generate vector tiles from the current database using the main orchestrator script:
+Generate vector tiles from the current database with the native engine:
 
 ```bash
-# Generate all tiles in all projections (with tile joining and BTIS metadata - DEFAULT)
-./production/generate-tiles.sh
-./production/generate-tiles.sh --all
+# Generate all layers in all projections (tile joining and BTIS metadata on by default)
+rbt tiles --all
 
 # Generate specific layer types
-./production/generate-tiles.sh --layer-type physical
-./production/generate-tiles.sh --layer-type cultural
+rbt tiles --layer-type physical
+rbt tiles --layer-type cultural
 
 # Generate specific projections
-./production/generate-tiles.sh --projection 3857  # Web Mercator
-./production/generate-tiles.sh --projection 3395  # World Mercator  
-./production/generate-tiles.sh --projection 4326  # Geographic
+rbt tiles --projection 3857  # Web Mercator (tippecanoe → MBTiles)
+rbt tiles --projection 3395  # World Mercator (tippecanoe → MBTiles)
+rbt tiles --projection 4326  # Geographic (GDAL MVT → tile directory)
 
 # Combine layer type and projection
-./production/generate-tiles.sh --layer-type physical --projection 3857
+rbt tiles --layer-type physical --projection 3857
 
-# Generate specific physical layers
-./production/generate-tiles.sh --layer-type physical --water --landcover --contour
+# Generate specific physical categories
+rbt tiles --layer-type physical --water --landcover --contour
 
-# Generate specific cultural layers
-./production/generate-tiles.sh --layer-type cultural --transportation --building --boundary
+# Generate specific cultural categories
+rbt tiles --layer-type cultural --transportation --building --boundary
 
-# Disable tile joining and BTIS metadata (generate individual files only)
-./production/generate-tiles.sh --all --no-tile-join --no-btis
+# Generate one specific layer by registry key (see `rbt layers list`)
+rbt tiles --layer water --projection 3857
+rbt tiles layer water --projection 3857          # single layer/projection shortcut
 
-# Custom processing options
-./production/generate-tiles.sh --all --temp-dir /mnt/fast-storage --version 2.0.0
+# Disable tile joining and BTIS metadata (individual files only)
+rbt tiles --all --no-tile-join --no-btis
+
+# Re-export cached FlatGeoBuf files after a database refresh
+rbt tiles --all --force
 
 # Dry run to see what would be executed
-./production/generate-tiles.sh --dry-run --verbose --all
+rbt --verbose tiles --all --dry-run
 ```
 
-### 3. Direct Layer-Specific Scripts (Advanced)
-
-For advanced users who need fine-grained control, you can also run the individual tile generation scripts directly:
-
-#### Physical Layer Scripts
-
-##### Physical Mercator Projections (3857, 3395) - Uses Tippecanoe
+Layer definitions (source views, zoom ranges, tippecanoe options, filters) live in `config/layers.yml`. Inspect them with:
 
 ```bash
-# Generate all physical layers in EPSG:3857 (default)
-./production/tile-generation/physical/generate-physical-3857-3395.sh
-
-# Generate all physical layers in EPSG:3395
-./production/tile-generation/physical/generate-physical-3857-3395.sh --projection 3395
-
-# Generate specific physical layers
-./production/tile-generation/physical/generate-physical-3857-3395.sh --water --landcover --contour
-
-# Generate with tile joining and BTIS metadata
-./production/tile-generation/physical/generate-physical-3857-3395.sh --all --tile-join --add-btis
-
-# Custom temp directory
-./production/tile-generation/physical/generate-physical-3857-3395.sh --all --temp-dir /mnt/fast-storage
+rbt layers list
+rbt layers show water
 ```
 
-##### Physical Geographic Projection (4326) - Uses GDAL MVT Driver
+### Per-Projection Backends
+
+The engine (`src/rbt/tiles/engine.py`) dispatches a different backend per projection:
+
+**Mercator projections (3857, 3395) — tippecanoe**:
+
+1. Each layer's source view is exported to FlatGeoBuf via `ogr2ogr` (cached — re-runs reuse the `.fgb` unless `--force` is passed).
+2. `tippecanoe` builds one MBTiles per layer with the zoom range, type coercions, and feature filters from the registry.
+3. `tile-join` merges the per-layer files into `physical_<proj>.mbtiles` / `cultural_<proj>.mbtiles` (`--tile-join`, default on).
+4. BTIS metadata is applied to the result (`--add-btis`, default on).
+
+**Geographic projection (4326) — GDAL MVT driver**:
+
+- tippecanoe is **not** involved. One multi-table `ogr2ogr -f MVT` call cuts the whole dataset directly from PostGIS, using a CONF json of per-table zoom windows (the `gdal_mvt:` block in `config/layers.yml`).
+- Output is a **tile directory** (`{z}/{x}/{y}.pbf` plus `metadata.json`), not MBTiles. `--tile-join`/`--add-btis` do not apply.
+- Each run deletes and rewrites the tile directory to avoid mixing stale tiles.
+
+### Deprecated Bash Generators
+
+The scripts in this directory predate the Python engine and are kept **only** until the real-data parity check in [docs/parity-runbook.md](parity-runbook.md) confirms the native output, after which they will be removed. They are reachable solely through the CLI escape hatch:
 
 ```bash
-# Generate all physical layers in EPSG:4326 (default)
-./production/tile-generation/physical/generate-physical-4326.sh
-
-# Generate specific physical layers
-./production/tile-generation/physical/generate-physical-4326.sh --water --landcover
-
-# Debug mode to see generated JSON configuration
-DEBUG=1 ./production/tile-generation/physical/generate-physical-4326.sh --water
-
-# Diagnostic mode to test each table individually
-DIAGNOSTIC=1 ./production/tile-generation/physical/generate-physical-4326.sh --all
+rbt tiles --mode bash --layer-type physical --projection 3857 --water
 ```
 
-#### Cultural Layer Scripts
-
-##### Cultural Mercator Projections (3857, 3395) - Uses Tippecanoe
-
-```bash
-# Generate all cultural layers in EPSG:3857 (default)
-./production/tile-generation/cultural/generate-cultural-3857-3395.sh
-
-# Generate all cultural layers in EPSG:3395
-./production/tile-generation/cultural/generate-cultural-3857-3395.sh --projection 3395
-
-# Generate specific cultural layers
-./production/tile-generation/cultural/generate-cultural-3857-3395.sh --transportation --building --boundary
-
-# Generate with tile joining and BTIS metadata
-./production/tile-generation/cultural/generate-cultural-3857-3395.sh --all --tile-join --add-btis
-
-# Custom temp directory
-./production/tile-generation/cultural/generate-cultural-3857-3395.sh --all --temp-dir /mnt/fast-storage
-```
-
-##### Cultural Geographic Projection (4326) - Uses GDAL MVT Driver
-
-```bash
-# Generate all cultural layers in EPSG:4326 (default)
-./production/tile-generation/cultural/generate-cultural-4326.sh
-
-# Generate specific cultural layers
-./production/tile-generation/cultural/generate-cultural-4326.sh --transportation --building
-
-# Debug mode to see generated JSON configuration
-DEBUG=1 ./production/tile-generation/cultural/generate-cultural-4326.sh --transportation
-
-# Diagnostic mode to test each table individually
-DIAGNOSTIC=1 ./production/tile-generation/cultural/generate-cultural-4326.sh --all
-```
+Do not add new layers to the bash scripts — extend `config/layers.yml` instead.
 
 ## 📁 Directory Structure
 
 ```text
 production/
-├── generate-tiles.sh           # Main tile generation orchestrator
-├── update-osm.sh              # OSM continuous updates
-├── tile-generation/           # Layer-specific generation scripts
-│   ├── physical/              # Physical layer tiles
-│   │   ├── generate-physical-3857-3395.sh  # Unified Mercator projections (Tippecanoe)
-│   │   └── generate-physical-4326.sh       # Geographic projection (GDAL MVT)
-│   │
-│   └── cultural/              # Cultural layer tiles
-│       ├── generate-cultural-3857-3395.sh  # Unified Mercator projections (Tippecanoe)
-│       └── generate-cultural-4326.sh       # Geographic projection (GDAL MVT)
-│
-└── README.md                  # This documentation file
+├── README.md                  # This documentation file
+├── generate-tiles.sh          # DEPRECATED bash orchestrator (`rbt tiles --mode bash`)
+└── tile-generation/           # DEPRECATED layer-specific generators
+    ├── physical/
+    │   ├── generate-physical-3857-3395.sh  # Mercator projections (tippecanoe)
+    │   └── generate-physical-4326.sh       # Geographic projection (GDAL MVT)
+    │
+    └── cultural/
+        ├── generate-cultural-3857-3395.sh  # Mercator projections (tippecanoe)
+        └── generate-cultural-4326.sh       # Geographic projection (GDAL MVT)
 ```
+
+OSM continuous updates have no bash script anymore — `rbt osm run|status|stop` replaced `update-osm.sh`.
 
 ## 🎛️ Command Reference
 
-### Main Scripts
+### rbt tiles
 
-#### generate-tiles.sh (Main Orchestrator)
-
-| Option | Description | Default | Example |
-|--------|-------------|---------|---------|
-| `--layer-type TYPE` | Layer type: physical, cultural, all | `all` | `--layer-type physical` |
-| `--projection PROJ` | Projection: 3857, 3395, 4326, all | `all` | `--projection 3857` |
-| `--temp-dir DIR` | Temp directory for tippecanoe processing | `/mnt/data` | `--temp-dir /tmp/tiles` |
-| `--no-tile-join` | Disable merging layers into consolidated files | tile-join enabled | `--no-tile-join` |
-| `--no-btis` | Disable BTIS metadata addition | BTIS enabled | `--no-btis` |
-| `--version VERSION` | Set BTP schema version | `1.0.0` | `--version 2.0.0` |
-| `--verbose, -v` | Enable verbose output | disabled | `--verbose` |
-| `--dry-run, -d` | Show commands without executing | disabled | `--dry-run` |
-| `--help, -h` | Show help message | - | `--help` |
-
-#### update-osm.sh (OSM Updates)
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| `run` (default) | Start continuous updates | `./update-osm.sh run` |
-| `status` | Show current update status | `./update-osm.sh status` |
-| `stop` | Stop running updates | `./update-osm.sh stop` |
-| `--help, -h` | Show help message | `./update-osm.sh --help` |
-
-### Direct Layer Scripts
-
-#### Physical Layer Scripts Options
-
-##### generate-physical-3857-3395.sh (Tippecanoe)
-
-| Option | Description | Default | Example |
-|--------|-------------|---------|---------|
-| `--projection CODE` | Projection: 3857, 3395 | `3857` | `--projection 3395` |
-| `--temp-dir DIR` | Temp directory for tippecanoe | `/mnt/data` | `--temp-dir /tmp` |
-| `--all` | Generate all physical layers | enabled if no layers specified | `--all` |
-| `--tile-join` | Merge layers into consolidated file | disabled | `--tile-join` |
-| `--add-btis` | Add BTIS metadata | disabled | `--add-btis` |
-| `--version VERSION` | Set BTP schema version | `1.0.0` | `--version 2.0.0` |
-
-Layer-specific options: `--builtuparea`, `--contour`, `--glacier`, `--landcover`, `--mountain`, `--park`, `--water`, `--water-label`, `--waterway`, `--inland-water`
-
-##### generate-physical-4326.sh (GDAL MVT)
-
-| Option | Description | Example |
+| Option | Description | Default |
 |--------|-------------|---------|
-| `--all` | Generate all physical layers (default) | `--all` |
-| Layer options | `--builtuparea`, `--contour`, `--glacier`, `--landcover`, `--mountain`, `--park`, `--water` | `--water --landcover` |
-| `DEBUG=1` | Show generated JSON configuration | `DEBUG=1 ./script.sh --water` |
-| `DIAGNOSTIC=1` | Test each table individually | `DIAGNOSTIC=1 ./script.sh --all` |
+| `--layer-type TYPE` | Layer type: `physical`, `cultural`, `all` | `all` |
+| `--projection PROJ` | Projection: `3857`, `3395`, `4326`, `all` | `all` |
+| `--all` | Every layer in every projection | — |
+| `--layer KEY` | Specific layer by registry key (repeatable) | — |
+| `--tile-join / --no-tile-join` | Merge per-layer MBTiles into a consolidated file | enabled |
+| `--add-btis / --no-btis` | Apply BTIS metadata | enabled |
+| `--force` | Re-export cached FlatGeoBuf files (use after a database refresh) | disabled |
+| `--mode native\|bash` | `bash` delegates to the deprecated generators | `native` |
+| `--dry-run, -d` | Show commands without executing | disabled |
+| Category flags | `--water`, `--building`, `--transportation`, … (see below) | — |
 
-#### Cultural Layer Scripts Options
+Global options go **before** the subcommand: `rbt --verbose tiles ...`, `rbt --debug tiles ...`, `rbt --log-file PATH tiles ...`.
 
-##### generate-cultural-3857-3395.sh (Tippecanoe)
+### rbt tiles layer
 
-| Option | Description | Default | Example |
-|--------|-------------|---------|---------|
-| `--projection CODE` | Projection: 3857, 3395 | `3857` | `--projection 3395` |
-| `--temp-dir DIR` | Temp directory for tippecanoe | `/mnt/data` | `--temp-dir /tmp` |
-| `--all` | Generate all cultural layers | enabled if no layers specified | `--all` |
-| `--tile-join` | Merge layers into consolidated file | disabled | `--tile-join` |
-| `--add-btis` | Add BTIS metadata | disabled | `--add-btis` |
-| `--version VERSION` | Set BTP schema version | `1.0.0` | `--version 2.0.0` |
+```bash
+rbt tiles layer KEY [--projection 3857|3395|4326] [--force] [--dry-run]
+```
 
-Layer-specific options: `--aeroway`, `--boundary`, `--building`, `--cemetery`, `--geonames`, `--transportation`, `--utilities`, `--other`
+Generates a single layer in a single projection (default `3857`).
 
-##### generate-cultural-4326.sh (GDAL MVT)
+### rbt osm
 
-| Option | Description | Example |
-|--------|-------------|---------|
-| `--all` | Generate all cultural layers (default) | `--all` |
-| Layer options | `--aeroway`, `--boundary`, `--building`, `--cemetery`, `--geonames`, `--populated`, `--landuse`, `--military`, `--radar`, `--transportation`, `--utilities` | `--transportation --building` |
-| `DEBUG=1` | Show generated JSON configuration | `DEBUG=1 ./script.sh --transportation` |
-| `DIAGNOSTIC=1` | Test each table individually | `DIAGNOSTIC=1 ./script.sh --all` |
+| Command | Description |
+|---------|-------------|
+| `rbt osm run` | Start continuous updates (supervises `imposm run`; blocks) |
+| `rbt osm status` | Show supervisor status + last applied OSM change (exit 1 if not running) |
+| `rbt osm stop` | Stop the running supervisor (SIGTERM → SIGKILL after 30s) |
+| `rbt osm import` | One-time OSM import (same as `rbt import osm`) |
 
-#### Layer Details
+### Category Flags
 
-##### Physical Layers (Available in generate-tiles.sh --layer-type physical and direct scripts)
+#### Physical (with `--layer-type physical`)
 
 | Option | Description | Layers Included |
 |--------|-------------|-----------------|
-| `--builtuparea` | Generate built-up area layer | Urban areas from NE and OSM |
-| `--contour` | Generate contour layers | Regular and glacier contour lines |
-| `--glacier` | Generate glacier layer | Glacier polygons from NE and OSM |
-| `--landcover` | Generate landcover layers | Land surface types and labels |
-| `--mountain` | Generate mountain label layer | Mountain peak labels |
-| `--park` | Generate park layer | Protected areas and parks |
-| `--water` | Generate water layer | Water bodies |
-| `--water-label` | Generate water label layer | Water feature labels |
-| `--waterway` | Generate waterway layer | Rivers, streams, canals |
-| `--inland-water` | Generate inland water intermittent layer | Seasonal water bodies |
+| `--builtuparea` | Built-up area layers | Urban areas from NE and OSM |
+| `--contour` | Contour layers | Regular and glacier contour lines |
+| `--glacier` | Glacier layer | Glacier polygons from NE and OSM |
+| `--landcover` | Landcover layers | Land surface types and labels |
+| `--mountain` | Mountain label layer | Mountain peak labels |
+| `--park` | Park layer | Protected areas and parks |
+| `--water` | Water layer | Water bodies |
+| `--water-label` | Water label layer | Water feature labels |
+| `--waterway` | Waterway layer | Rivers, streams, canals |
+| `--inland-water` | Inland water intermittent layer | Seasonal water bodies |
 
-##### Cultural Layers (Available in generate-tiles.sh --layer-type cultural and direct scripts)
+#### Cultural (with `--layer-type cultural`)
 
 | Option | Description | Layers Included |
 |--------|-------------|-----------------|
-| `--aeroway` | Generate aeroway layers | Airports, runways, heliports |
-| `--boundary` | Generate boundary layers | Administrative boundaries (ADM0/1/2) |
-| `--building` | Generate building layer | Building footprints |
-| `--cemetery` | Generate cemetery layers | Cemetery polygons and labels |
-| `--geonames` | Generate geonames layers | Hydrographic place names |
-| `--transportation` | Generate transportation layers | Roads, railways, ports, ferries |
-| `--utilities` | Generate utilities layers | Power, pipelines, dams, utilities |
-| `--other` | Generate other cultural layers | Stadiums, military, radar |
+| `--aeroway` | Aeroway layers | Airports, runways, heliports |
+| `--boundary` | Boundary layers | Administrative boundaries (ADM0/1/2) |
+| `--building` | Building layer | Building footprints |
+| `--cemetery` | Cemetery layers | Cemetery polygons and labels |
+| `--geonames` | Geonames layers | Hydrographic place names |
+| `--transportation` | Transportation layers | Roads, railways, ports, ferries |
+| `--utilities` | Utilities layers | Power, pipelines, dams, utilities |
+| `--other` | Other cultural layers | Stadiums, military, radar |
 
-### Script Execution Summary
-
-| Script | Purpose | When to Use |
-|--------|---------|-------------|
-| `generate-tiles.sh` | **Main orchestrator** - handles all projections and layers | **Recommended** - Use for most tile generation needs |
-| `update-osm.sh` | OSM continuous updates | Keep OSM data current - run as background service |
-| `generate-*-3857-3395.sh` | Direct Tippecanoe generation for Mercator projections | Advanced users needing fine control over Mercator tiles |
-| `generate-*-4326.sh` | Direct GDAL MVT generation for geographic projection | Advanced users needing fine control over 4326 tiles |
+The same flags select the corresponding table groups in the 4326 GDAL-MVT datasets, so one invocation works across every projection.
 
 ## 🕐 Scheduling
 
@@ -294,14 +214,19 @@ Set up cron jobs for regular tile updates:
 crontab -e
 
 # Generate all tiles daily at 2 AM (consolidation and metadata enabled by default)
-0 2 * * * cd /path/to/rbt-vector-tiles && ./production/generate-tiles.sh --all
+0 2 * * * cd /path/to/rbt-vector-tiles && rbt tiles --all --force
 
 # Generate physical tiles every 6 hours (water-related layers only)
-0 */6 * * * cd /path/to/rbt-vector-tiles && ./production/generate-tiles.sh --layer-type physical --water --waterway --inland-water
+0 */6 * * * cd /path/to/rbt-vector-tiles && rbt tiles --layer-type physical --water --waterway --inland-water --force
 
 # Generate cultural transportation tiles every 4 hours
-0 */4 * * * cd /path/to/rbt-vector-tiles && ./production/generate-tiles.sh --layer-type cultural --transportation
+0 */4 * * * cd /path/to/rbt-vector-tiles && rbt tiles --layer-type cultural --transportation --force
 ```
+
+!!! note "`--force` in scheduled runs"
+    Scheduled regeneration almost always follows fresh data (OSM updates,
+    schema refreshes), so pass `--force` to invalidate the FlatGeoBuf export
+    cache — otherwise the Mercator backends will reuse stale exports.
 
 ### Systemd Services
 
@@ -317,7 +242,7 @@ After=postgresql.service
 Type=simple
 User=rbt
 WorkingDirectory=/opt/rbt-vector-tiles
-ExecStart=/opt/rbt-vector-tiles/production/update-osm.sh run
+ExecStart=/usr/local/bin/rbt osm run
 Restart=always
 RestartSec=30
 
@@ -330,32 +255,34 @@ WantedBy=multi-user.target
 ### Health Checks
 
 ```bash
-# Check OSM update status
-./production/update-osm.sh status
+# Check OSM update status (exit 1 when not running — cron/monitoring friendly)
+rbt osm status
 
-# Validate database connectivity (using config from rbt.conf)
-psql "host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=${DATABASE_NAME} user=${DATABASE_USER} password=${DATABASE_PASSWORD}" -c "SELECT COUNT(*) FROM import.highway;"
+# Fast database liveness probe (the Docker HEALTHCHECK command)
+rbt health
 
-# Check tile generation capability
-./production/generate-tiles.sh --dry-run --verbose
+# Full environment validation
+rbt validate
 
-# Test specific projection generation
-./production/generate-tiles.sh --dry-run --layer-type physical --projection 3857 --water
+# Check tile generation capability without writing anything
+rbt --verbose tiles --all --dry-run
+
+# Test a specific projection/category selection
+rbt tiles --dry-run --layer-type physical --projection 3857 --water
 ```
 
 ### Log Files
 
-Production logs are stored in `../output/logs/`:
+Logs land in `$SHARED_LOG_DIR` (default `./output/logs`):
 
-- `tile_generation_*.log` - Tile generation logs
-- `osm_updates_*.log` - OSM update logs
-- `performance_*.log` - Performance metrics
+- `rbt_<timestamp>.log` — per-invocation CLI log (`--log-file` to override)
+- Per-layer tile logs next to the tiles: `output/tiles/<type>/<proj>/<layer>_<proj>.log`, plus `merge_<proj>.log` (tile-join) and `<type>_4326_mvt.log` (4326 backend)
 
 ## 🔧 Configuration
 
 ### Processing Parameters
 
-Adjust settings in `../config/processing.conf`:
+Adjust settings in `config/rbt.conf` (environment variables override; see [configuration.md](configuration.md)):
 
 ```bash
 # Parallel processing
@@ -363,7 +290,10 @@ MAX_PARALLEL_JOBS=4
 
 # Tile generation
 DEFAULT_PROJECTION=3857
-TILE_CACHE_DIR=./output/tiles
+TILE_CACHE_DIR=./output/tiles   # where tiles are written
+TILE_TEMP_DIR=/tmp/tiles        # tippecanoe scratch space — keep on fast storage
+TILE_MIN_ZOOM=0
+TILE_MAX_ZOOM=13
 
 # Resource limits
 MEMORY_REQUIRED_GB=16
@@ -372,23 +302,20 @@ DISK_SPACE_REQUIRED_GB=100
 
 ### Projection Methods
 
-The tile generation system uses different approaches for different projections:
-
 **Mercator Projections (3857, 3395)**:
 
-- Uses **tippecanoe** for tile generation
+- Uses **tippecanoe** for tile generation (via a cached FlatGeoBuf export)
 - Outputs **MBTiles** files (SQLite format)
 - Optimized for web mapping and serving
 - Supports tile joining and BTIS metadata
-- Includes advanced filtering and optimization
+- Includes advanced filtering and optimization (from `config/layers.yml`)
 
 **Geographic Projection (4326)**:
 
-- Uses **GDAL MVT driver** for tile generation
-- Outputs **directory structure** with PBF files
+- Uses the **GDAL MVT driver** — a single multi-table ogr2ogr call per dataset
+- Outputs a **directory structure** with PBF files plus `metadata.json`
 - Preserves lat/lon accuracy for analysis
-- Includes embedded JSON configuration
-- Supports diagnostic mode for troubleshooting
+- Zoom-variant views (e.g. pre-simplified `_z8`/`_z10` tables) blend into one target layer via per-table zoom windows
 
 ## 🚨 Troubleshooting
 
@@ -401,65 +328,46 @@ The tile generation system uses different approaches for different projections:
 psql "host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=${DATABASE_NAME} user=${DATABASE_USER} password=${DATABASE_PASSWORD}" -c "\dv rbt.*"
 
 # Validate environment
-../tools/validate-environment.sh
+rbt validate
 
 # Run with debug output
-./production/generate-tiles.sh --verbose --dry-run
+rbt --verbose tiles --all --dry-run
 
 # Test specific layer generation
-./production/generate-tiles.sh --layer-type physical --water --verbose --dry-run
+rbt --verbose tiles --layer-type physical --water --dry-run
 
-# Check tippecanoe temp directory has sufficient space
-df -h /mnt/data  # or your custom temp directory
+# Check the tippecanoe temp directory has sufficient space
+df -h /tmp/tiles  # or your configured TILE_TEMP_DIR
 
-# For 4326 tiles, run diagnostic mode
-cd production/tile-generation/physical
-DIAGNOSTIC=1 ./generate-physical-4326.sh --water
+# Tiles look stale after a database refresh? Invalidate the export cache
+rbt tiles --layer-type physical --water --force
 
-# For 3857/3395 tiles, check individual layers
-./production/generate-tiles.sh --layer-type cultural --building --verbose --dry-run
-
-# Test with custom temp directory
-./production/generate-tiles.sh --all --temp-dir /tmp/tiles --dry-run --verbose
+# For 4326 issues, check the backend log
+tail -n 50 output/tiles/physical/4326/physical_4326_mvt.log
 ```
 
 #### 2. OSM updates stop working
 
 ```bash
-# Check imposm status
-./production/update-osm.sh status
+# Check imposm supervisor status
+rbt osm status
 
 # Restart updates
-./production/update-osm.sh stop
-./production/update-osm.sh run
+rbt osm stop
+rbt osm run
 ```
 
 #### 3. Performance issues
 
 ```bash
-# Check system resources
-../tools/troubleshooting/analyze-performance.sh
+# Reduce parallel jobs for a run
+MAX_PARALLEL_JOBS=2 rbt tiles --all
 
-# Reduce parallel jobs
-export MAX_PARALLEL_JOBS=2
+# Move tippecanoe scratch space to faster storage
+TILE_TEMP_DIR=/mnt/nvme/tiles rbt tiles --all
 ```
 
-### Debug Mode
-
-Enable detailed logging:
-
-```bash
-# Main orchestrator script with verbose output
-./production/generate-tiles.sh --all --verbose --dry-run
-
-# For 4326 direct scripts, use DEBUG environment variable
-DEBUG=1 ./production/tile-generation/physical/generate-physical-4326.sh --water
-DEBUG=1 ./production/tile-generation/cultural/generate-cultural-4326.sh --transportation
-
-# For diagnostic testing of problematic tables
-DIAGNOSTIC=1 ./production/tile-generation/physical/generate-physical-4326.sh --all
-DIAGNOSTIC=1 ./production/tile-generation/cultural/generate-cultural-4326.sh --all
-```
+See [troubleshooting.md](troubleshooting.md) for the full guide.
 
 ## 🔄 Update Workflows
 
@@ -467,17 +375,16 @@ DIAGNOSTIC=1 ./production/tile-generation/cultural/generate-cultural-4326.sh --a
 
 **Daily**:
 
-- OSM updates run automatically (if started as service)
+- OSM updates run automatically (if started as a service)
 - Monitor logs for any errors
 
 **Weekly**:
 
-- Regenerate tiles: `./production/generate-tiles.sh --all`
-- Check system health: `../tools/validate-environment.sh`
+- Regenerate tiles: `rbt tiles --all --force`
+- Check system health: `rbt validate`
 
 **Monthly**:
 
-- Analyze performance: `./production/monitoring/performance-metrics.sh`
 - Review disk space usage
 - Update documentation if needed
 
@@ -486,16 +393,16 @@ DIAGNOSTIC=1 ./production/tile-generation/cultural/generate-cultural-4326.sh --a
 **OSM updates fail**:
 
 1. Check network connectivity
-2. Verify imposm configuration
-3. Restart update process
+2. Verify imposm configuration (`OSM_CONFIG_FILE`)
+3. Restart: `rbt osm stop && rbt osm run`
 4. Check database locks
 
 **Tile generation fails**:
 
-1. Validate database views exist
+1. Validate database views exist (`rbt schema run --all` recreates them)
 2. Check available disk space
-3. Verify tool dependencies
-4. Run individual projection scripts for debugging
+3. Verify tool dependencies (`rbt validate`)
+4. Generate a single layer to isolate the problem: `rbt tiles layer water --projection 3857`
 
 ## 📈 Performance Optimization
 
@@ -518,35 +425,37 @@ SET random_page_cost = 1.1;
 
 - **Parallel Jobs**: Adjust `MAX_PARALLEL_JOBS` based on CPU cores
 - **Memory**: Increase database memory settings for large operations
-- **Storage**: Use NVMe SSD for database and temporary files
+- **Storage**: Use NVMe SSD for the database, `TILE_TEMP_DIR`, and `TILE_CACHE_DIR`
 - **Network**: High-bandwidth connection for OSM updates
 
 ## 🎯 Output
 
-Generated tiles are stored in `../output/tiles/`:
+Generated tiles are written to `$TILE_CACHE_DIR` (default `./output/tiles`):
 
 ```text
 output/tiles/
 ├── physical/
-│   ├── 3857/                    # Web Mercator physical tiles
-│   │   ├── individual layers/   # Individual MBTiles files per layer
-│   │   └── physical_3857.mbtiles # Consolidated MBTiles (if --tile-join used)
-│   ├── 3395/                    # World Mercator physical tiles
-│   │   ├── individual layers/
-│   │   └── physical_3395.mbtiles
-│   └── 4326/                    # Geographic physical tiles
-│       ├── metadata.json        # Layer metadata and configuration
-│       └── [z]/[x]/[y].pbf      # Directory-based tile structure
+│   ├── 3857/                        # Web Mercator physical tiles
+│   │   ├── water_3857.mbtiles       # One MBTiles per layer (+ .fgb export + .log)
+│   │   ├── ...
+│   │   └── physical_3857.mbtiles    # Consolidated MBTiles (tile-join, default on)
+│   ├── 3395/                        # World Mercator physical tiles
+│   │   └── ... (same layout)
+│   └── 4326/                        # Geographic physical tiles
+│       └── physical_tiles/
+│           ├── metadata.json        # Layer metadata and configuration
+│           └── [z]/[x]/[y].pbf      # Directory-based tile structure
 └── cultural/
-    ├── 3857/                    # Web Mercator cultural tiles
-    │   ├── individual layers/   # Individual MBTiles files per layer
-    │   └── cultural_3857.mbtiles # Consolidated MBTiles (if --tile-join used)
-    ├── 3395/                    # World Mercator cultural tiles
-    │   ├── individual layers/
-    │   └── cultural_3395.mbtiles
-    └── 4326/                    # Geographic cultural tiles
-        ├── metadata.json        # Layer metadata and configuration
-        └── [z]/[x]/[y].pbf      # Directory-based tile structure
+    ├── 3857/
+    │   ├── building_3857.mbtiles
+    │   ├── ...
+    │   └── cultural_3857.mbtiles
+    ├── 3395/
+    │   └── ... (same layout)
+    └── 4326/
+        └── cultural_tiles/
+            ├── metadata.json
+            └── [z]/[x]/[y].pbf
 ```
 
 ### Output Types
@@ -554,24 +463,25 @@ output/tiles/
 **MBTiles Files (3857, 3395)**:
 
 - Individual layer files: e.g., `water_3857.mbtiles`, `highway_3857.mbtiles`
-- Consolidated files: `physical_3857.mbtiles`, `cultural_3857.mbtiles` (with `--tile-join`)
+- Consolidated files: `physical_3857.mbtiles`, `cultural_3857.mbtiles` (with `--tile-join`, default)
 - SQLite-based tile archives optimized for serving
-- Include BTIS metadata when generated with `--add-btis`
+- Include BTIS metadata when generated with `--add-btis` (default)
 
 **PBF Directories (4326)**:
 
-- Directory-based tile structure: `z/x/y.pbf`
-- Uses GDAL MVT driver for optimal 4326 projection handling
+- Directory-based tile structure: `<dataset>_tiles/z/x/y.pbf`
+- Uses the GDAL MVT driver for optimal 4326 projection handling
 - Includes `metadata.json` with layer configuration and statistics
+- Regenerated from scratch on every run (stale trees are removed first)
 
 ### BTIS Metadata
 
-When using `--add-btis`, MBTiles files include:
+When `--add-btis` is active (default), MBTiles files include:
 
 - CRS information (EPSG code)
 - Tile origin coordinates
 - Tile dimension at zoom 0
-- BTP schema version
+- BTP schema version (`meta.btp_schema_version` in `config/layers.yml`)
 - Cleaned tippecanoe metadata
 
 ## 🚀 Advanced Usage Examples
@@ -582,54 +492,52 @@ Generate only specific layers for targeted use cases:
 
 ```bash
 # Generate only transportation infrastructure
-./production/generate-tiles.sh --layer-type cultural --transportation --utilities --projection 3857
+rbt tiles --layer-type cultural --transportation --utilities --projection 3857
 
 # Generate water-related layers for hydrological mapping
-./production/generate-tiles.sh --layer-type physical --water --waterway --inland-water --projection all
+rbt tiles --layer-type physical --water --waterway --inland-water --projection all
 
 # Generate terrain layers for topographic mapping
-./production/generate-tiles.sh --layer-type physical --contour --glacier --mountain --projection 3857 --add-btis
+rbt tiles --layer-type physical --contour --glacier --mountain --projection 3857
 ```
 
 ### Custom Processing Workflows
 
 ```bash
-# High-performance generation with custom temp directory
-./production/generate-tiles.sh --all --temp-dir /mnt/nvme/temp
+# High-performance generation with custom scratch space
+TILE_TEMP_DIR=/mnt/nvme/temp rbt tiles --all
 
-# Development/testing workflow - single layer with verbose output
-./production/generate-tiles.sh --layer-type cultural --building --projection 3857 --verbose --dry-run
+# Development/testing workflow — single layer with verbose output
+rbt --verbose tiles --layer-type cultural --building --projection 3857 --dry-run
 
-# Production deployment - all layers with full metadata and custom version
-./production/generate-tiles.sh --all --version "2.0.0"
+# Separate output directory (e.g. for A/B comparison)
+TILE_CACHE_DIR=./output/tiles-candidate rbt tiles --all
 ```
 
 ### Projection-Specific Workflows
 
 ```bash
-# Web mapping (3857) - optimized for online maps
-./production/generate-tiles.sh --projection 3857 --all --temp-dir /mnt/data
+# Web mapping (3857) — optimized for online maps
+rbt tiles --projection 3857
 
-# Geographic analysis (4326) - preserves lat/lon accuracy
-./production/generate-tiles.sh --projection 4326 --all
+# Geographic analysis (4326) — preserves lat/lon accuracy
+rbt tiles --projection 4326
 
-# Area-preserving (3395) - better for area calculations
-./production/generate-tiles.sh --projection 3395 --layer-type physical --landcover --water
+# Area-preserving (3395) — better for area calculations
+rbt tiles --projection 3395 --layer-type physical --landcover --water
 ```
 
 ### Diagnostic and Troubleshooting
 
 ```bash
-# Debug mode for 4326 generation
-cd production/tile-generation/cultural
-DEBUG=1 ./generate-cultural-4326.sh --transportation
+# Inspect what a layer will generate (zooms, filters, tippecanoe flags)
+rbt layers show water
 
-# Test individual tables in 4326 generation
-cd production/tile-generation/physical
-DIAGNOSTIC=1 ./generate-physical-4326.sh --water
+# Single layer, single projection, no side effects
+rbt tiles layer water --projection 4326 --dry-run
 
-# Performance testing with minimal data
-./production/generate-tiles.sh --layer-type cultural --building --projection 3857 --verbose
+# Compare against the deprecated bash path (see the parity runbook)
+TILE_CACHE_DIR=./output/tiles-bash rbt tiles --mode bash --layer-type physical --projection 3857 --water
 ```
 
 ## 📚 Related Documentation
@@ -637,6 +545,7 @@ DIAGNOSTIC=1 ./generate-physical-4326.sh --water
 - **[← Back to Home](index.md)**
 - **[Getting Started Guide](getting-started.md)** - Complete setup walkthrough
 - **[Architecture Overview](architecture.md)** - System design and data flow
+- **[Parity Runbook](parity-runbook.md)** - Retiring the deprecated bash generators
 - **[Physical Layers](physical-layers.md)** - Natural feature processing details
 - **[Cultural Layers](cultural-layers.md)** - Human infrastructure processing details
 - **[Setup Documentation](setup-readme.md)** - Database initialization and setup

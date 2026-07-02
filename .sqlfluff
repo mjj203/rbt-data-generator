@@ -1,0 +1,14 @@
+[sqlfluff]
+dialect = postgres
+templater = raw
+exclude_rules = L003, L004, L016, L030, L034, L036, L044
+
+[sqlfluff:indentation]
+tab_space_size = 4
+indent_unit = space
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = upper
+
+[sqlfluff:rules:capitalisation.identifiers]
+extended_capitalisation_policy = lower

@@ -1,11 +1,11 @@
 site_name: RBT Vector Tiles Documentation
 site_description: Comprehensive geospatial vector tile generation system for multi-projection mapping
 site_author: Michael Jones
-site_url: https://rbt.pages.dso.xc.nga.mil/etl/vectortiles
+site_url: https://mjj203.github.io/rbt-data-generator/
 
 # Repository
-repo_name: vectortiles
-repo_url: https://gitlab.dso.xc.nga.mil/RBT/etl/vectortiles
+repo_name: MJJ203/rbt-data-generator
+repo_url: https://github.com/MJJ203/rbt-data-generator
 edit_uri: edit/main/docs/
 
 
@@ -55,8 +55,10 @@ theme:
   font:
     text: Roboto
     code: Roboto Mono
-  logo: assets/agc-logo-transparent.png
-  favicon: assets/favicon.ico
+
+# Build hooks
+hooks:
+  - docs/_hooks/gen_cli_reference.py
 
 # Plugins
 plugins:
@@ -90,7 +92,9 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      base_path: [".", "docs"]
+      check_paths: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -106,11 +110,9 @@ markdown_extensions:
 
 # Customization
 extra:
-  version:
-    provider: mike
   social:
     - icon: fontawesome/brands/github
-      link: https://gitlab.dso.xc.nga.mil/RBT/etl/vectortiles
+      link: https://github.com/MJJ203/rbt-data-generator
       name: GitHub Repository
   status:
     new: Recently added
@@ -119,19 +121,33 @@ extra:
 # Page tree
 nav:
   - Home: index.md
-  - Getting Started: getting-started.md
-  - Architecture: architecture.md
-  - Database Setup:
+  - Overview:
+    - Project Tour: project-structure.md
+    - Architecture: architecture.md
+    - Data Sources & Licensing: data-sources.md
+  - Install & Deploy:
+    - Installation: installation.md
+    - Getting Started Tutorial: getting-started.md
+    - Operations Guide: operations.md
+    - Performance & Sizing: performance.md
+  - Database:
+    - Schema Reference: database-schema.md
     - Database Initialization: database-initialization.md
     - OSM Import Pipeline: osm-import.md
-    - Setup Documentation: setup-readme.md
-  - Layer Processing:
+  - Tile Generation:
     - Physical Layers: physical-layers.md
     - Cultural Layers: cultural-layers.md
-  - Production Operations:
-    - Production Guide: production-readme.md
-  - Specialized Processing:
     - DuckDB Buildings Export: duckdb-buildings.md
-  - API References:
-    - MapProxy APIs: api/mapproxy-api.md
-    - Tileserver-GL APIs: api/tileserver-api.md
+    - Parity Runbook: parity-runbook.md
+  - Reference:
+    - rbt CLI: cli.md
+    - Configuration: configuration.md
+    - Troubleshooting: troubleshooting.md
+    - Bash Internals — Setup: setup-readme.md
+    - Bash Internals — Production: production-readme.md
+    - MapProxy API: api/mapproxy-api.md
+    - Tileserver-GL API: api/tileserver-api.md
+  - Project:
+    - Contributing: contributing.md
+    - Changelog: changelog.md
+    - Security: security.md

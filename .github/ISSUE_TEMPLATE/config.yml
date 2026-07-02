@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://mjj203.github.io/rbt-data-generator/
+    about: Installation, tutorials, operations, and the CLI reference.
+  - name: Security vulnerability
+    url: https://github.com/MJJ203/rbt-data-generator/security/advisories/new
+    about: Report vulnerabilities privately — never in a public issue.

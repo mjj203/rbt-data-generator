@@ -1,5 +1,22 @@
 # Physical Data Processing Workflow
 
+!!! warning "Script names below are historical"
+    This page predates the `rbt` Python CLI and still describes the original
+    standalone script names (`process-physical-schemas.sh`, `physical.sql`,
+    `water.sql`, `contour.sql`, `tiles.sh`, `4326_tiles.sh`). **None of those
+    files exist anymore.** The underlying SQL algorithms and processing
+    concepts described here are still broadly accurate, but to actually run
+    anything, use today's commands:
+
+    - Schema processing: `rbt schema list` / `rbt schema run physical` (dispatches
+      the real files under
+      [`setup/data-sources/schemas/physical/`](https://github.com/MJJ203/rbt-data-generator/tree/main/setup/data-sources/schemas/physical)
+      — `physical-core.sql`, `landcover.sql`, `water-features.sql`, `terrain.sql`).
+    - Tile generation: `rbt tiles --layer-type physical --projection <3857|3395|4326> [--water|--landcover|...]`
+      (see the [CLI Reference](cli.md) and [`config/layers.yml`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/layers.yml)
+      for the declarative layer/filter definitions that replaced the JSON
+      configs and per-layer bash flags below).
+
 ## Overview
 
 This directory contains the complete workflow for processing physical (natural features) geospatial data and generating vector tiles in multiple projections. The workflow transforms raw OpenStreetMap (OSM) and Natural Earth data stored in PostgreSQL/PostGIS into optimized Mapbox Vector Tiles (MVT) for web mapping applications, focusing on terrain, hydrology, land cover, and natural features.

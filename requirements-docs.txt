@@ -15,3 +15,7 @@ mkdocs-print-site-plugin>=2.3.0
 
 # Additional dependencies for markdown extensions
 pymdown-extensions>=10.0
+
+# CLI reference generation: docs/_hooks/gen_cli_reference.py shells out to
+# `python -m typer` at build time, which needs the rbt package installed
+# (pip install -e .) — typer itself comes in as its dependency.

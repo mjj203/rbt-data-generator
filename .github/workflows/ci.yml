@@ -1,0 +1,343 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  # GitHub Actions sets GITHUB_ACTIONS=true, which makes Typer/Rich force
+  # terminal-style rendering even though stdout is a captured pipe. That
+  # wraps option names like `--all` in bold/dim ANSI attribute codes (not
+  # just color), splitting the literal substring and breaking tests that
+  # assert on CLI output. NO_COLOR alone doesn't fully suppress this because
+  # bold/dim are text attributes, not colors; _TYPER_FORCE_DISABLE_TERMINAL
+  # is Typer's own escape hatch for disabling the forced-terminal detection.
+  NO_COLOR: "1"
+  _TYPER_FORCE_DISABLE_TERMINAL: "1"
+
+jobs:
+  shell-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: shellcheck
+        run: |
+          set -euxo pipefail
+          find setup production tools scripts \
+            -type f -name "*.sh" -print0 \
+            | xargs -0 shellcheck --severity=warning --external-sources
+
+  sql-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install sqlfluff
+        run: pip install "sqlfluff>=3.0"
+      # tools/duckdb-building-export.sql is DuckDB SQL (INSTALL/LOAD extensions,
+      # SET VARIABLE), not Postgres — linting it under --dialect postgres is a
+      # parse failure, not a real finding, so it's excluded from this target
+      # rather than counted as a "legacy" violation.
+      #
+      # setup/data-sources/schemas still has real, unremediated style findings
+      # (spacing, capitalization, keyword-as-identifier, CREATE INDEX
+      # CONCURRENTLY, redundant ELSE NULL); keep this non-blocking until a
+      # dedicated cleanup pass lands, then flip continue-on-error to false.
+      - name: sqlfluff lint (non-blocking pending schema cleanup)
+        continue-on-error: true
+        run: |
+          sqlfluff lint setup/data-sources/schemas \
+            --dialect postgres --disable-progress-bar
+
+  dockerfile-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: hadolint
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: Dockerfile.production
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [dockerfile-lint]
+    steps:
+      - uses: actions/checkout@v7
+      # Build the Python wheel stage so a broken build context (e.g. a file
+      # excluded by .dockerignore that the Dockerfile COPYs) fails CI instead of
+      # only surfacing at deploy time. hadolint alone never runs `docker build`.
+      - name: Build python-builder stage
+        run: docker build -f Dockerfile.production --target python-builder .
+
+  docker-publish:
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    # Least-privilege: only this job gets package-publish rights, and only
+    # needs them at all when it will actually push (not on pull_request).
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        # Forked-PR runs don't have push access to secrets.GITHUB_TOKEN's
+        # package scope for this repo, and shouldn't publish anyway.
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Derive image tags and labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Build (and push on main) the runtime image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.production
+          target: runtime
+          # PRs (including from forks) build for validation only; only a push
+          # to main actually publishes to ghcr.io.
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+
+  yaml-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pip install yamllint
+      - run: |
+          yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, comments: {min-spaces-from-content: 1}, truthy: {check-keys: false}}}' \
+            config/layers.yml config/prometheus.yml docker-compose.yml \
+            .github/workflows
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          # Must match (or exceed) the floor declared in pyproject.toml's
+          # `requires-python`; uv sync fails outright otherwise.
+          python-version: "3.13"
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Set up Python + deps
+        run: |
+          ~/.local/bin/uv sync --extra dev --python "$(which python)"
+      - name: Ruff
+        run: ~/.local/bin/uv run ruff check src tests
+      - name: Ruff format
+        run: ~/.local/bin/uv run ruff format --check src tests
+      - name: Mypy
+        run: ~/.local/bin/uv run mypy src tests
+      - name: Pytest
+        run: ~/.local/bin/uv run pytest -q --cov=rbt --cov-report=term-missing --cov-fail-under=92
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    needs: [shell-lint, python]
+    services:
+      postgres:
+        image: postgis/postgis:18-3.6
+        env:
+          POSTGRES_USER: rbt_user
+          POSTGRES_PASSWORD: rbt_password
+          POSTGRES_DB: rbt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rbt_user -d rbt"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PG_HOST: localhost
+      PG_PORT: 5432
+      PG_DATABASE: rbt
+      PG_USR: rbt_user
+      PG_PASS: rbt_password
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install runtime dependencies
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --batch --yes --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18 sqlite3
+      - name: Install GDAL via micromamba
+        run: |
+          curl -fsSL "https://github.com/mamba-org/micromamba-releases/releases/download/2.8.1-0/micromamba-linux-64" \
+            -o /usr/local/bin/micromamba
+          sudo chmod +x /usr/local/bin/micromamba
+          MAMBA_ROOT_PREFIX="$HOME/micromamba" /usr/local/bin/micromamba create -y -n geo -c conda-forge gdal=3.13.1
+          echo "$HOME/micromamba/envs/geo/bin" >> "$GITHUB_PATH"
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Set up Python CLI
+        # The GDAL micromamba env's bin dir was just prepended to PATH, and
+        # its `python` is a 3.14 freethreaded build with no psycopg-binary
+        # wheel available. Pin to a standard (non-freethreaded) 3.13 so uv
+        # provisions its own interpreter instead of picking that one up.
+        run: ~/.local/bin/uv sync --python 3.13
+      - name: Dry-run validation (rbt CLI)
+        run: |
+          ~/.local/bin/uv run rbt --no-log-file tiles --layer-type physical --projection 3857 --water --dry-run
+          ~/.local/bin/uv run rbt --no-log-file tiles --layer-type cultural --projection 4326 --building --dry-run
+          ~/.local/bin/uv run rbt --no-log-file schema run --all --dry-run
+      - name: Dry-run validation (deprecated bash path)
+        run: |
+          ./production/generate-tiles.sh --layer-type physical --projection 3857 --water --dry-run
+          ./production/generate-tiles.sh --layer-type cultural --projection 4326 --building --dry-run
+
+  integration-tiles:
+    runs-on: ubuntu-latest
+    needs: [python]
+    services:
+      postgres:
+        image: postgis/postgis:18-3.6
+        env:
+          POSTGRES_USER: rbt_user
+          POSTGRES_PASSWORD: rbt_password
+          POSTGRES_DB: rbt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rbt_user -d rbt"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PG_HOST: localhost
+      PG_PORT: 5432
+      PG_DATABASE: rbt
+      PG_USR: rbt_user
+      PG_PASS: rbt_password
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install runtime dependencies
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --batch --yes --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18 sqlite3
+      - name: Install GDAL via micromamba
+        run: |
+          curl -fsSL "https://github.com/mamba-org/micromamba-releases/releases/download/2.8.1-0/micromamba-linux-64" \
+            -o /usr/local/bin/micromamba
+          sudo chmod +x /usr/local/bin/micromamba
+          MAMBA_ROOT_PREFIX="$HOME/micromamba" /usr/local/bin/micromamba create -y -n geo -c conda-forge gdal=3.13.1
+          echo "$HOME/micromamba/envs/geo/bin" >> "$GITHUB_PATH"
+      - name: Cache tippecanoe
+        id: cache-tippecanoe
+        uses: actions/cache@v6
+        with:
+          path: ~/tippecanoe-prefix
+          key: tippecanoe-2.79.0-ubuntu24
+      - name: Build tippecanoe 2.79.0
+        if: steps.cache-tippecanoe.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install -y build-essential libsqlite3-dev zlib1g-dev
+          git clone --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe.git "$RUNNER_TEMP/tippecanoe"
+          make -C "$RUNNER_TEMP/tippecanoe" -j"$(nproc)"
+          make -C "$RUNNER_TEMP/tippecanoe" install PREFIX="$HOME/tippecanoe-prefix"
+      - name: Add tippecanoe to PATH
+        run: |
+          # `tippecanoe --version` exits non-zero by design, so verify the
+          # binaries by presence instead.
+          test -x "$HOME/tippecanoe-prefix/bin/tippecanoe"
+          test -x "$HOME/tippecanoe-prefix/bin/tippecanoe-decode"
+          test -x "$HOME/tippecanoe-prefix/bin/tile-join"
+          echo "$HOME/tippecanoe-prefix/bin" >> "$GITHUB_PATH"
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Set up Python CLI
+        # The GDAL micromamba env's bin dir was just prepended to PATH, and
+        # its `python` is a 3.14 freethreaded build with no psycopg-binary
+        # wheel available. Pin to a standard (non-freethreaded) 3.13 so uv
+        # provisions its own interpreter instead of picking that one up.
+        run: ~/.local/bin/uv sync --python 3.13
+      - name: Seed water + building fixture data
+        run: |
+          psql "host=localhost port=5432 dbname=rbt user=rbt_user password=rbt_password" \
+            -v ON_ERROR_STOP=1 -f tests/fixtures/seed_water.sql
+          psql "host=localhost port=5432 dbname=rbt user=rbt_user password=rbt_password" \
+            -v ON_ERROR_STOP=1 -f tests/fixtures/seed_building.sql
+      - name: Generate water tiles (EPSG:3857, tippecanoe backend)
+        run: |
+          ~/.local/bin/uv run rbt --no-log-file tiles \
+            --layer-type physical --projection 3857 --water --no-tile-join
+      - name: Verify EPSG:3857 MBTiles output
+        run: |
+          set -euxo pipefail
+          mbtiles=output/tiles/physical/3857/water_3857.mbtiles
+          test -f "$mbtiles"
+          crs="$(sqlite3 "$mbtiles" "SELECT value FROM metadata WHERE name='crs'")"
+          test "$crs" = "EPSG:3857"
+          btp="$(sqlite3 "$mbtiles" "SELECT value FROM metadata WHERE name='btp_schema_version'")"
+          test -n "$btp"
+          tippecanoe-decode --stats "$mbtiles" | grep -q '"water"'
+      - name: Generate water tiles (EPSG:3395, tippecanoe backend)
+        run: |
+          ~/.local/bin/uv run rbt --no-log-file tiles \
+            --layer-type physical --projection 3395 --water --no-tile-join
+      - name: Verify EPSG:3395 MBTiles output
+        run: |
+          set -euxo pipefail
+          mbtiles=output/tiles/physical/3395/water_3395.mbtiles
+          test -f "$mbtiles"
+          crs="$(sqlite3 "$mbtiles" "SELECT value FROM metadata WHERE name='crs'")"
+          test "$crs" = "EPSG:3395"
+          tippecanoe-decode --stats "$mbtiles" | grep -q '"water"'
+      - name: Generate building tiles (EPSG:3857, cultural, tippecanoe backend)
+        run: |
+          ~/.local/bin/uv run rbt --no-log-file tiles \
+            --layer-type cultural --projection 3857 --building --no-tile-join
+      - name: Verify cultural EPSG:3857 MBTiles output
+        run: |
+          set -euxo pipefail
+          mbtiles=output/tiles/cultural/3857/building_3857.mbtiles
+          test -f "$mbtiles"
+          crs="$(sqlite3 "$mbtiles" "SELECT value FROM metadata WHERE name='crs'")"
+          test "$crs" = "EPSG:3857"
+          tippecanoe-decode --stats "$mbtiles" | grep -q '"building"'
+      - name: Generate water tiles (EPSG:4326, GDAL MVT backend)
+        run: |
+          ~/.local/bin/uv run rbt --no-log-file tiles \
+            --layer-type physical --projection 4326 --water
+      - name: Verify EPSG:4326 tile directory output
+        run: |
+          set -euxo pipefail
+          tile_dir=output/tiles/physical/4326/physical_tiles
+          test -d "$tile_dir"
+          test -f "$tile_dir/metadata.json"
+          grep -q 'EPSG:4326' "$tile_dir/metadata.json"

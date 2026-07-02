@@ -21,9 +21,7 @@ info:
 
 servers:
   - url: http://localhost:8080/
-    description: Default local server
-  - url: https://tileserver-rbt-agc-dev.apps.kubic.dev.ngaxc.net/
-    description: Production server
+    description: Default local server (docker compose --profile serve)
 
 tags:
   - name: Styles

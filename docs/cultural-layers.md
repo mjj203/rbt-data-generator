@@ -1,5 +1,22 @@
 # Cultural Data Processing Workflow
 
+!!! warning "Script names below are historical"
+    This page predates the `rbt` Python CLI and still describes the original
+    standalone scripts and `cultural_layer_config.json`, which **no longer
+    exist**. The underlying SQL algorithms and processing concepts described
+    here are still broadly accurate, but to actually run anything, use
+    today's commands:
+
+    - Schema processing: `rbt schema list` / `rbt schema run cultural` (dispatches
+      the real files under
+      [`setup/data-sources/schemas/cultural/`](https://github.com/MJJ203/rbt-data-generator/tree/main/setup/data-sources/schemas/cultural)
+      — `cultural-core.sql`, `transportation.sql`, `transportation-railway.sql`, `infrastructure.sql`).
+    - Tile generation: `rbt tiles --layer-type cultural --projection <3857|3395|4326> [--building|--transportation|...]`
+      (see the [CLI Reference](cli.md)). `cultural_layer_config.json` is
+      replaced by the declarative layer/filter definitions in
+      [`config/layers.yml`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/layers.yml)
+      — inspect it with `rbt layers list` / `rbt layers show <key>`.
+
 ## Overview
 
 This directory contains the complete workflow for processing cultural geospatial data and generating vector tiles in multiple projections. The workflow transforms raw OpenStreetMap (OSM) and other geospatial data stored in PostgreSQL/PostGIS into optimized Mapbox Vector Tiles (MVT) for web mapping applications.

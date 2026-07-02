@@ -1,0 +1,10 @@
+external-sources=true
+disable=SC1091
+disable=SC2312
+disable=SC2155
+# Stylistic checks accepted in the deprecated generators and leaf importers:
+# SC1090 non-constant source paths, SC2207 word-split array fills, SC2010 ls|grep
+# in display-only code.
+disable=SC1090
+disable=SC2207
+disable=SC2010

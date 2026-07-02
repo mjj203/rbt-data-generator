@@ -1,294 +1,269 @@
-# Getting Started with RBT Vector Tiles
+# Getting Started
 
-This guide will walk you through setting up and running RBT Vector Tiles for the first time.
+This tutorial takes you from a fresh clone to rendered vector tiles you can pan around in a browser — using a **small regional OSM extract** (a Geofabrik country file) instead of the full planet, so every step finishes in minutes rather than hours.
 
-## 📋 Prerequisites
+By the end you will have:
 
-### System Requirements
+1. A PostGIS database loaded with OSM and reference data for one country
+2. The `rbt.*` SQL views built on top of it
+3. Physical-layer tiles in Web Mercator (EPSG:3857)
+4. TileServer-GL serving them at <http://localhost:8080>
 
-**Minimum Configuration**:
-- 16 CPU cores
-- 32GB RAM  
-- 100GB available disk space
-- Ubuntu 20.04+ or macOS 10.15+
+!!! note "Planet-scale setup"
+    This page optimizes for a fast first run. For a full planet deployment — including hardware sizing, unattended setup, and continuous OSM replication — see [Installation](installation.md), the [Operations Guide](operations.md), and [Performance & Sizing](performance.md).
 
-**Recommended Configuration**:
-- 32 CPU cores
-- 128GB RAM
-- 1TB NVMe SSD
-- Dedicated PostgreSQL server
-
-### Required Software
-
-1. **PostgreSQL 17+** with PostGIS 3.5+
-2. **GDAL/OGR 3.10+** with MVT and FlatGeoBuf drivers
-3. **Imposm3** (latest version)
-4. **Tippecanoe** (latest version)
-5. **Node.js 22+** (for some utilities)
-
-### Installation on Ubuntu
-
-```bash
-# PostgreSQL and PostGIS
-sudo apt update
-sudo apt install postgresql-17 postgresql-17-postgis-3
-
-# GDAL/OGR
-sudo apt install gdal-bin python3-gdal
-
-# Install Imposm3
-wget https://github.com/omniscale/imposm3/releases/download/v0.11.1/imposm-0.11.1-linux-x86-64.tar.gz
-tar xzf imposm-0.11.1-linux-x86-64.tar.gz
-sudo mv imposm-0.11.1-linux-x86-64/imposm /usr/local/bin/
-
-# Install Tippecanoe
-git clone https://github.com/felt/tippecanoe.git
-cd tippecanoe
-make -j$(nproc)
-sudo make install
-```
-
-### Installation on macOS
-
-```bash
-# Using Homebrew
-brew install postgresql@17 postgis gdal imposm tippecanoe
-```
-
-## 🚀 Step-by-Step Setup
-
-### Step 1: Clone and Configure
-
-```bash
-# Clone the repository
-git clone https://github.com/your-org/rbt-vector-tiles.git
-cd rbt-vector-tiles
-
-# Copy environment template (optional)
-cp env.example .env
-```
-
-### Step 2: Configure Environment
-
-**Option 1: Centralized Configuration (Recommended)**
-
-Edit the main configuration file `config/rbt.conf`:
-
-```bash
-# Database connection settings
-DATABASE_HOST=localhost
-DATABASE_USER=postgres
-DATABASE_PASSWORD=your_secure_password
-DATABASE_NAME=rbt
-
-# Processing settings (adjust based on your hardware)
-MAX_PARALLEL_JOBS=4
-LOG_LEVEL=INFO
-DEFAULT_PROJECTION=3857
-
-# Resource settings
-DISK_SPACE_REQUIRED_GB=100
-MEMORY_REQUIRED_GB=16
-```
-
-**Option 2: Environment Variables (Backward Compatible)**
-
-Edit `.env` file or set environment variables:
-
-```bash
-# Database connection (legacy variable names still supported)
-PG_HOST=localhost
-PG_USR=postgres
-PG_PASS=your_secure_password
-PG_DATABASE=rbt
-
-# Processing settings
-MAX_PARALLEL_JOBS=4
-LOG_LEVEL=INFO
-```
-
-> **💡 Configuration Priority**: Environment variables override `config/rbt.conf`, which overrides script defaults. The centralized config provides consistency while maintaining flexibility.
-
-### Step 3: Validate Environment
-
-```bash
-./tools/validate-environment.sh
-```
-
-This will check:
-- ✅ All required tools are installed
-- ✅ Database connection works
-- ✅ Sufficient disk space and memory
-- ✅ Project structure is correct
-
-### Step 4: Initialize Database
-
-```bash
-./setup/init-database.sh
-```
-
-This one-time process will:
-1. **Download OSM planet data** (~55GB, 1-3 hours)
-2. **Import OSM data** using Imposm3 (2-6 hours)
-3. **Import reference datasets** (1-2 hours):
-   - FieldMaps administrative boundaries
-   - Natural Earth cartographic data
-   - GeoNames geographic names
-   - Overture Maps building footprints
-   - Aviation data from OurAirports
-4. **Process database schemas** (30-60 minutes)
-
-**Total time**: 6-12 hours depending on hardware and internet speed.
-
-### Step 5: Start Production Operations
-
-#### Start Continuous OSM Updates
-
-```bash
-# Start in background
-nohup ./production/update-osm.sh run > osm-updates.log 2>&1 &
-
-# Check status
-./production/update-osm.sh status
-```
-
-#### Generate Vector Tiles
-
-```bash
-# Generate all tiles in all projections
-./production/generate-tiles.sh --all
-
-# Or generate specific combinations
-./production/generate-tiles.sh --layer-type physical --projection 3857
-./production/generate-tiles.sh --layer-type cultural --projection 4326
-```
-
-## 🎯 Understanding the Workflow
-
-### One-Time Setup vs. Continuous Operations
-
-RBT Vector Tiles has two distinct phases:
-
-#### 1. **Setup Phase** (Run Once)
-- Database initialization
-- Data source imports
-- Schema processing
-
-#### 2. **Production Phase** (Run Continuously)
-- OSM data updates (background service)
-- Vector tile generation (on-demand or scheduled)
-
-### Data Flow
+## How the pieces fit
 
 ```mermaid
 graph TD
-    A[OSM Planet Data] --> B[Imposm3 Import]
-    C[Reference Data Sources] --> D[Data Import Scripts]
-    B --> E[PostgreSQL + PostGIS]
-    D --> E
-    E --> F[Schema Processing]
-    F --> G[Optimized Views & Indexes]
-    G --> H[Tile Generation]
-    H --> I[Vector Tiles Output]
-    
-    J[OSM Updates] --> B
-    J -.-> H
+    A[OSM extract or planet PBF] -->|rbt import osm| E[(PostGIS<br/>rbt database)]
+    B[FieldMaps / Natural Earth /<br/>OurAirports reference data] -->|rbt import reference| E
+    C[NGA GNS GeoNames] -->|rbt import geonames| E
+    D[Overture Maps buildings] -->|rbt import buildings| E
+    E -->|rbt schema run| F[rbt.* SQL views]
+    F -->|rbt tiles| G[MBTiles / MVT directories<br/>under output/tiles/]
+    G --> H[TileServer-GL :8080]
+    I[OSM replication diffs] -->|rbt osm run| E
 ```
 
-## 📊 Monitoring and Maintenance
+The Python `rbt` CLI orchestrates everything. The four `rbt import` subcommands delegate to contract-documented bash leaf scripts under `setup/data-sources/`; every other step (database bootstrap, schema processing, tile generation, health checks) runs natively in Python.
 
-### Health Checks
+## Prerequisites
+
+- **Docker and Docker Compose** — used for PostGIS and the tile server in this tutorial (and optionally for the CLI itself).
+- **If you run the CLI locally**: Python 3.13+, [uv](https://docs.astral.sh/uv/), and the geospatial toolchain — `psql`, GDAL/OGR (`ogr2ogr`), `imposm`, `tippecanoe` + `tile-join`, `wget`, and the `aws` CLI. [Installation](installation.md) covers installing each tool; `rbt validate` (Step 3) verifies them for you.
+
+Hardware expectations depend heavily on the size of your extract; see [Performance & Sizing](performance.md) before attempting anything larger than a country.
+
+## Step 1 — Clone and configure
 
 ```bash
-# Check system status
-./tools/validate-environment.sh
+git clone https://github.com/MJJ203/rbt-data-generator.git
+cd rbt-data-generator
 ```
 
-### Log Monitoring
+Configuration is resolved with the precedence **CLI overrides → environment variables → `config/rbt.conf` → built-in defaults**. The CLI never mutates your environment; it bundles the resolved `PG*` / `PG_*` / `DATABASE_*` variables for every child process, so the importers and `psql` all see the same connection.
 
-Logs are stored in `output/logs/`:
-- `database_init_*.log` - Database initialization
-- `tile_generation_*.log` - Tile generation
-- `osm_updates_*.log` - OSM updates
-
-## 🐳 Docker Deployment
-
-### Quick Start with Docker
+For this tutorial, export the settings in your shell (or set the same keys permanently in `config/rbt.conf`):
 
 ```bash
-# Step 1: Initial setup (one-time database initialization)
-docker-compose --profile setup up rbt-setup
+# Database connection — matches the docker-compose defaults
+export PG_HOST=localhost
+export PG_PORT=5432
+export PG_DATABASE=rbt
+export PG_USR=rbt_user
+export PG_PASS=rbt_password
 
-# Step 2: Start production services (OSM updates + tile generation)
-docker-compose --profile production up -d
+# Where the OSM importer reads and writes (defaults are /mnt/data etc.)
+export OSM_DATA_DIR="$PWD/output/osm/data"
+export OSM_CACHE_DIR="$PWD/output/osm/cache"
+export OSM_DIFF_DIR="$PWD/output/osm/diff"
 
-# Step 3 (Optional): Start with tile server for serving generated tiles
-docker-compose --profile production --profile serve up -d
+# imposm3 connects with its own URL — keep it in sync with the credentials above
+export OSM_CONNECTION="postgis://rbt_user:rbt_password@localhost/rbt?prefix=NONE"
 
-# Generate tiles manually
-docker-compose exec rbt-tiles ./production/generate-tiles.sh --all
-
-# Check OSM update status
-docker-compose exec rbt-osm-updates ./production/update-osm.sh status
+mkdir -p output/osm/data output/osm/cache output/osm/diff
 ```
 
-### Docker Configuration
+If you plan to use the Docker Compose services, also copy `env.example` to `.env` so the containers pick up the same credentials. See the [Configuration Reference](configuration.md) for every available key.
 
-Edit environment variables in your `.env` file or `config/rbt.conf` before starting:
+## Step 2 — Start PostgreSQL
+
+=== "Docker (recommended)"
+
+    The `postgres` service (PostGIS 18 / 3.6) has no profile, so it starts with a plain `up`:
+
+    ```bash
+    docker compose up -d postgres
+    ```
+
+    It listens on `127.0.0.1:5432` with the `rbt` database created on first boot.
+
+=== "Existing PostgreSQL"
+
+    Use any PostgreSQL 18 server with PostGIS 3.6 available. Point `PG_HOST` / `PG_PORT` / `PG_USR` / `PG_PASS` at it; the user needs permission to create databases and extensions. `rbt setup --setup-database` (Step 5) creates the database and extensions for you.
+
+## Step 3 — Install the CLI and validate
+
+=== "Local (uv)"
+
+    ```bash
+    uv sync
+    uv run rbt validate
+    ```
+
+    (`pip install -e .` works too if you prefer a plain virtualenv; then drop the `uv run` prefix.)
+
+=== "Docker"
+
+    Build the image once, then run one-off commands through the `rbt-setup` service:
+
+    ```bash
+    docker compose build
+    docker compose --profile setup run --rm rbt-setup rbt validate
+    ```
+
+`rbt validate` checks your configuration, the required external tools (`psql`, `ogr2ogr`, `imposm`, `tippecanoe`, `tile-join`, `wget`, `aws`), the database connection, disk space, memory, and the project structure.
+
+!!! note "Warnings are expected on a fresh database"
+    Before setup, `validate` warns that the `rbt` schemas don't exist yet (``Schema 'rbt' not found (run `rbt setup`)``). Errors are what matter at this stage — typically a missing tool or unreachable database.
+
+## Step 4 — Download a regional extract
+
+[Geofabrik](https://download.geofabrik.de/) publishes daily OSM extracts using the URL pattern `https://download.geofabrik.de/<region>/<area>-latest.osm.pbf`. For example, Switzerland:
 
 ```bash
-# Database settings
-PG_USR=rbt_user
-PG_PASS=rbt_password  
-PG_DATABASE=rbt
-
-# Processing settings
-MAX_PARALLEL_JOBS=4
-LOG_LEVEL=INFO
+wget -O "$OSM_DATA_DIR/planet.osm.pbf" \
+  https://download.geofabrik.de/europe/switzerland-latest.osm.pbf
 ```
 
-## 🔍 Troubleshooting
+The importer looks for the file under that exact name — `$OSM_DATA_DIR/planet.osm.pbf` — regardless of whether it is a planet file or an extract.
 
-### Common Issues
+!!! note "Minimum size check"
+    The import stage sanity-checks `planet.osm.pbf` against a minimum size of `OSM_MIN_PBF_SIZE_MB` (default 10 MB), so country-sized extracts pass without any configuration. For very small extracts (e.g. Liechtenstein, ~3 MB) lower the threshold, or raise it (e.g. `50000`) to catch truncated planet downloads — set `OSM_MIN_PBF_SIZE_MB` in `config/rbt.conf` or the environment.
 
-**Database connection errors**:
+## Step 5 — Create the database
+
+=== "Local (uv)"
+
+    ```bash
+    uv run rbt setup --setup-database
+    ```
+
+=== "Docker"
+
+    ```bash
+    docker compose --profile setup run --rm rbt-setup rbt setup --setup-database
+    ```
+
+This bootstraps the database natively (no shell scripts): it creates the `rbt` database if missing and installs the `postgis`, `postgis_raster`, `hstore`, and `pg_trgm` extensions.
+
+## Step 6 — Import data
+
+### OSM extract
+
+`rbt import osm` passes everything after `--` straight through to the leaf script, which exposes one flag per pipeline stage. For a pre-downloaded extract you only need the import stage:
+
+=== "Local (uv)"
+
+    ```bash
+    uv run rbt import osm -- --import
+    ```
+
+=== "Docker"
+
+    The container can only see paths under the mounted `./output` directory, so place the extract at `./output/osm/data/planet.osm.pbf` on the host and override the OSM paths:
+
+    ```bash
+    docker compose --profile setup run --rm \
+      -e OSM_DATA_DIR=/app/output/osm/data \
+      -e OSM_CACHE_DIR=/app/output/osm/cache \
+      -e OSM_DIFF_DIR=/app/output/osm/diff \
+      -e OSM_CONNECTION="postgis://rbt_user:rbt_password@postgres/rbt?prefix=NONE" \
+      rbt-setup rbt import osm -- --import
+    ```
+
+This runs `imposm import` with the project's mapping (`setup/data-sources/osm/imposm-mapping.yaml`), writing OSM tables in EPSG:3857 and recording diff state so replication can pick up later.
+
+The other pass-through stages (run `rbt import osm -- --help` for the full list):
+
+| Stage | What it does |
+|---|---|
+| `--all` | Download the planet, fetch and apply diffs, import, then start `imposm run` |
+| `--download-planet` | Download the planet PBF from a mirror list |
+| `--download-diffs START END` | Fetch daily replication diffs by sequence number |
+| `--merge-diffs` / `--apply-changes` | Merge diffs and apply them to the PBF with osmosis |
+| `--import` | Import `$OSM_DATA_DIR/planet.osm.pbf` with imposm3 |
+| `--import-diff` | Apply downloaded `.osc.gz` changesets as a one-time update |
+
+### Reference data
+
+The physical and cultural views join OSM against global reference datasets (FieldMaps administrative boundaries, Natural Earth, OurAirports, OSM water polygons and coastlines), so import them even for a regional run:
+
 ```bash
-# Check connection
-./tools/validate-environment.sh
-
-# Test manually
-psql "host=$PG_HOST dbname=rbt user=$PG_USR password=$PG_PASS" -c "SELECT version();"
+uv run rbt import reference
 ```
 
-**Insufficient resources**:
-- Reduce `MAX_PARALLEL_JOBS` in `config/rbt.conf` or via environment variable
-- Increase PostgreSQL memory settings
-- Ensure sufficient disk space
+### Optional: GeoNames and Overture buildings
 
-**Tile generation failures**:
+These are only needed for the **cultural** layer family (place labels and the building layer):
+
 ```bash
-# Run with verbose logging
-./production/generate-tiles.sh --verbose --dry-run
+uv run rbt import geonames     # NGA GNS names (geonames.nga.mil)
+uv run rbt import buildings    # Overture Maps buildings from S3 (requires the aws CLI; large download)
 ```
 
-## 📚 Next Steps
+You can skip both for now and still complete this tutorial; come back to them before running cultural layers. See [DuckDB Buildings Export](duckdb-buildings.md) for an alternative buildings workflow.
 
-### Continue with Documentation
+## Step 7 — Build the `rbt.*` views
 
-- **[🏗️ Architecture Overview](architecture.md)** - System design, data flow, and deployment architecture
-- **[🌍 Physical Layers](physical-layers.md)** - Terrain, hydrology, land cover processing
-- **[🏙️ Cultural Layers](cultural-layers.md)** - Transportation, buildings, infrastructure processing
-- **[🗄️ Database Initialization](database-initialization.md)** - Detailed database setup process
-- **[📥 OSM Import Pipeline](osm-import.md)** - OpenStreetMap data processing workflow
+The tile layers read from SQL views in the `rbt` schema, defined by eight PL/pgSQL files registered in `config/layers.yml`:
 
-### Additional Resources
+```bash
+uv run rbt schema list                  # see the registered units
+uv run rbt schema run --type physical   # physical-core, landcover, water, contour
+```
 
-- **[Setup Guide](setup-readme.md)** - Detailed setup documentation
-- **[Production Guide](production-readme.md)** - Continuous operations documentation
-- **[DuckDB Buildings Export](duckdb-buildings.md)** - Alternative building data processing
+Each file runs through `psql -v ON_ERROR_STOP=1`, so a failure stops immediately with a useful error. Once GeoNames and buildings are imported, build everything:
 
-### Getting Help
+```bash
+uv run rbt schema run --all
+```
 
-- **Configuration issues**: Check the [troubleshooting section](#troubleshooting) above
-- **Performance problems**: Review the system requirements and resource allocation
-- **Data issues**: Consult the layer-specific documentation for processing details
+## Step 8 — Generate tiles
+
+Start with a single category to confirm the pipeline end to end:
+
+```bash
+uv run rbt tiles --layer-type physical --projection 3857 --water
+```
+
+For 3857 (and 3395), each layer is exported from PostGIS to FlatGeoBuf with `ogr2ogr`, then rendered to MBTiles with `tippecanoe`. The water layer lands at `output/tiles/physical/3857/water_3857.mbtiles`.
+
+Then generate the full physical set — multiple layers are merged with `tile-join` into one file and stamped with BTIS metadata:
+
+```bash
+uv run rbt tiles --layer-type physical --projection 3857
+# → output/tiles/physical/3857/physical_3857.mbtiles
+```
+
+Useful variations:
+
+```bash
+uv run rbt tiles --layer-type physical --projection 3857 --dry-run   # print commands without running
+uv run rbt tiles layer water --projection 3857                       # one layer, one projection
+uv run rbt tiles --layer-type physical --projection 3857 --force     # re-export cached FlatGeoBuf after a DB refresh
+uv run rbt layers list                                               # inspect the layer registry
+```
+
+!!! note "EPSG:4326 uses a different backend"
+    Geographic tiles are produced by GDAL's native MVT driver in a single multi-table `ogr2ogr` call — no tippecanoe involved — and are written as a tile *directory* plus `metadata.json` rather than an `.mbtiles` file.
+
+In Docker, run the same commands through the tiles service:
+
+```bash
+docker compose --profile production run --rm rbt-tiles \
+  rbt tiles --layer-type physical --projection 3857
+```
+
+## Step 9 — Serve and view
+
+The `serve` profile runs TileServer-GL against `./output/tiles`:
+
+```bash
+docker compose --profile serve up -d --no-deps tile-server
+```
+
+Open <http://localhost:8080> and you should see your data sources listed, with an inspector for browsing the tiles. (`--no-deps` skips the `rbt-tiles` container, whose default command would kick off a full `rbt tiles --all` run.)
+
+!!! note "Tile server configuration"
+    `config/tile-server.json` expects both `physical/3857/physical_3857.mbtiles` and `cultural/3857/cultural_3857.mbtiles`. If you only generated the physical set, remove the `cultural-3857` entry from the `data` block (or generate the cultural set after importing GeoNames and buildings).
+
+## Next steps
+
+- **Verify your environment end to end** — `uv run rbt smoke` runs validate → bootstrap → schemas → tile dry-runs as one sanity check.
+- **[Operations Guide](operations.md)** — continuous OSM replication with `rbt osm run` / `status` / `stop`, scheduled tile generation, and monitoring.
+- **[rbt CLI Reference](cli.md)** — every command and flag.
+- **[Architecture](architecture.md)** — how the orchestrator, importers, and tile engine fit together.
+- **[Parity Runbook](parity-runbook.md)** — the deprecated bash tile generators remain reachable via `rbt tiles --mode bash` until the native engine is verified against real data.
+- **[Troubleshooting](troubleshooting.md)** — common failures and fixes.

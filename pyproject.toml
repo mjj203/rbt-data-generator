@@ -1,0 +1,95 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rbt"
+version = "0.1.0"
+description = "RBT Vector Tiles — Python CLI for geospatial tile generation from OSM, Overture, GeoNames, and Natural Earth."
+readme = "README.md"
+requires-python = ">=3.13"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Michael Jones" },
+]
+keywords = ["geospatial", "vector-tiles", "postgis", "tippecanoe", "mbtiles", "imposm"]
+classifiers = [
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+  "typer>=0.12",
+  "rich>=13.7",
+  "pyyaml>=6.0",
+  "psycopg[binary]>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.1",
+  "pytest-cov>=4.1",
+  "ruff>=0.5",
+  "mypy>=1.10",
+  "types-PyYAML",
+]
+
+[project.scripts]
+rbt = "rbt.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/MJJ203/rbt-data-generator"
+Documentation = "https://mjj203.github.io/rbt-data-generator/"
+Issues = "https://github.com/MJJ203/rbt-data-generator/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rbt"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM", "PL"]
+ignore = [
+    "PLR0913",   # too many args (typer commands legitimately have many)
+    "PLR2004",   # magic values
+    "PLR0911",   # too many return statements
+    "UP042",     # str + Enum pattern; StrEnum still opt-in for Typer compat
+    "B008",      # typer.Option in argument defaults is idiomatic
+    "E501",      # long lines — handled by formatter
+    "N805",      # first arg of classmethod is cls
+    "N818",      # Exception class naming
+    "SIM108",    # ternary vs if/else readability is subjective
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PLR2004", "PLR0912", "PLR0915", "S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+filterwarnings = [
+    "error",
+    "default::pytest.PytestUnraisableExceptionWarning",
+]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Tests are type-checked for real errors, but pytest fixtures/parametrize
+# make full strict-mode annotation coverage low value; relax the
+# annotation-completeness and reexport rules that would otherwise dominate
+# with boilerplate rather than catching bugs.
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+implicit_reexport = true

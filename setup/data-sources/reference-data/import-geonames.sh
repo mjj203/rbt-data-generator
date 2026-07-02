@@ -2,6 +2,18 @@
 set -euo pipefail
 
 # =============================================================================
+# CONTRACT — bash leaf script, invoked via `rbt import geonames` / `rbt setup`
+# =============================================================================
+# Inputs:  NGA GNS (geonames.nga.mil) zip downloads; env DATABASE_*/PG_*
+#          (provided by the rbt CLI); WGET_PARALLEL_JOBS from config/rbt.conf.
+# Outputs: geonames schema tables in the target database; logs under
+#          $SHARED_LOG_DIR.
+# Exit:    0 on success, non-zero on any failed stage. Do not invoke directly
+#          — only through the rbt CLI, which resolves and exports the
+#          environment this script expects.
+# =============================================================================
+
+# =============================================================================
 # GEONAMES DATA INGESTION SCRIPT - EXTRACTED FROM MAIN DATABASE SETUP
 # =============================================================================
 #
@@ -26,14 +38,12 @@ set -euo pipefail
 # Global configuration
 readonly SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
-# Source configuration file if available
-CONFIG_DIR="${SCRIPT_DIR}/../../../config"
-if [[ -f "${CONFIG_DIR}/rbt.conf" ]]; then
-    echo "Loading configuration from ${CONFIG_DIR}/rbt.conf"
-    # shellcheck source=/dev/null
-    source "${CONFIG_DIR}/rbt.conf"
-fi
+# Single source of truth for config/rbt.conf loading + DATABASE_*/PG_*
+# resolution (see scripts/lib/README.md).
+source "${PROJECT_ROOT}/scripts/lib/config.sh"
+rbt_config_load
 
 # Configuration with fallbacks
 readonly LOG_DIR="${SHARED_LOG_DIR:-${SCRIPT_DIR}/logs}"
@@ -49,24 +59,22 @@ readonly VERBOSE="${SCRIPT_VERBOSE:-false}"
 readonly CLEAN_TEMP_FILES="${SCRIPT_CLEAN_TEMP_FILES:-false}"
 
 # Database connection (built once)
-readonly PG_CONNECTION="host=${PG_HOST} port=5432 dbname=rbt user=${PG_USR} password=${PG_PASS}"
+readonly PG_CONNECTION="host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=${DATABASE_NAME} user=${DATABASE_USER} password=${DATABASE_PASSWORD}"
 
-# Check if output is to terminal for color support
+# Shared rbt_log implementation (timestamp/PID formatting, colorized output).
+# shellcheck source=/dev/null
+source "${PROJECT_ROOT}/scripts/lib/logging.sh"
+
+# Check if output is to terminal for color support.
+# Only RED/CYAN/NC remain in direct use (show_job_error, progress bar); the
+# rest of the palette moved into scripts/lib/logging.sh's rbt_log.
 if [[ -t 1 ]]; then
     readonly RED='\033[0;31m'
-    readonly GREEN='\033[0;32m'
-    readonly YELLOW='\033[1;33m'
-    readonly BLUE='\033[0;34m'
-    readonly PURPLE='\033[0;35m'
     readonly CYAN='\033[0;36m'
     readonly NC='\033[0m' # No Color
 else
     # No colors if not terminal
     readonly RED=''
-    readonly GREEN=''
-    readonly YELLOW=''
-    readonly BLUE=''
-    readonly PURPLE=''
     readonly CYAN=''
     readonly NC=''
 fi
@@ -92,34 +100,19 @@ init_logging() {
     log_info "Temporary directory: $TEMP_DIR"
 }
 
-# Logging functions with structured format (fixed to avoid duplicate tee)
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $(date '+%Y-%m-%d %H:%M:%S') [$$] $*"
-}
-
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $(date '+%Y-%m-%d %H:%M:%S') [$$] $*"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $(date '+%Y-%m-%d %H:%M:%S') [$$] $*"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $(date '+%Y-%m-%d %H:%M:%S') [$$] $*" >&2
-}
-
-log_progress() {
-    echo -e "${PURPLE}[PROGRESS]${NC} $(date '+%Y-%m-%d %H:%M:%S') [$$] $*"
-}
-
-log_job() {
-    echo -e "${CYAN}[JOB]${NC} $(date '+%Y-%m-%d %H:%M:%S') [$$] $*"
-}
+# Logging functions delegate to the shared rbt_log implementation
+# (scripts/lib/logging.sh) for timestamp/PID formatting and coloring; the
+# level names below are chosen to match its color-case switch.
+log_info() { rbt_log "INFO" "$@"; }
+log_success() { rbt_log "SUCCESS" "$@"; }
+log_warning() { rbt_log "WARN" "$@"; }
+log_error() { rbt_log "ERROR" "$@"; }
+log_progress() { rbt_log "STEP" "$@"; }
+log_job() { rbt_log "JOB" "$@"; }
 
 log_debug() {
     if [[ "$DEBUG" == "true" || "$VERBOSE" == "true" ]]; then
-        echo -e "${PURPLE}[DEBUG]${NC} $(date '+%Y-%m-%d %H:%M:%S') [$$] $*"
+        rbt_log "DEBUG" "$@"
     fi
 }
 
@@ -156,7 +149,7 @@ show_progress() {
     
     printf "\r${CYAN}[PROGRESS]${NC} %s [" "$message"
     printf "%*s" $filled | tr ' ' '='
-    printf "%*s" $((bar_length - filled)) | tr ' ' '-'
+    printf "%*s" $((bar_length - filled)) "" | tr ' ' '-'
     printf "] %d%% (%d/%d)" $percentage $current $total
     
     if [ $current -eq $total ]; then
@@ -867,7 +860,7 @@ ingest_geonames_generic() {
     ogr2ogr -progress \
         -f "PostgreSQL" \
         --config PG_USE_COPY YES \
-        "PG:dbname=rbt host=${PG_HOST} user=${PG_USR} password=${PG_PASS}" \
+        "PG:dbname=${DATABASE_NAME} host=${DATABASE_HOST} port=${DATABASE_PORT} user=${DATABASE_USER} password=${DATABASE_PASSWORD}" \
          -a_srs EPSG:4326 \
         -nln "geonames.${table_name}" \
         -lco GEOMETRY_NAME=geometry \
@@ -1086,9 +1079,10 @@ main() {
     log_success "Completed jobs: ${#COMPLETED_JOBS[@]}"
     
     if [[ ${#FAILED_JOBS[@]} -gt 0 ]]; then
-        log_warning "Failed jobs: ${#FAILED_JOBS[@]} - ${FAILED_JOBS[*]}"
+        log_error "GeoNames ingestion completed with ${#FAILED_JOBS[@]} failed job(s): ${FAILED_JOBS[*]}"
+        return 1
     fi
-    
+
     log_success "GeoNames data ingestion finished successfully!"
 }
 

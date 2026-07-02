@@ -1,0 +1,64 @@
+name: Bug report
+description: Something in the pipeline is broken or behaving unexpectedly.
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment mode
+      options:
+        - Docker Compose
+        - Bare metal (local CLI)
+        - Kubernetes / other orchestration
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Setup / data import (rbt setup, rbt import)
+        - Schema processing (rbt schema)
+        - Tile generation (rbt tiles)
+        - OSM updates (rbt osm)
+        - Serving (TileServer-GL / MapProxy)
+        - CLI / configuration
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Output of `rbt --version` or the git commit you are running.
+    validations:
+      required: true
+  - type: textarea
+    id: validate
+    attributes:
+      label: rbt validate output
+      description: Paste the output of `rbt validate` (it redacts passwords).
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log excerpt
+      description: Lines from `output/logs/` around the failure.
+      render: text
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. rbt setup --setup-database
+        2. rbt tiles --layer-type physical --projection 3857 --water
+        3. ...

@@ -2,6 +2,19 @@
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # =============================================================================
+# CONTRACT — bash leaf script, invoked via `rbt import osm` / `rbt setup`
+# =============================================================================
+# Inputs:  OSM planet PBF or regional extract (downloaded via aria2c), env
+#          DATABASE_*/PG_* (provided by the rbt CLI), OSM_* settings from
+#          config/rbt.conf (data/cache/diff dirs, imposm mapping + config).
+# Outputs: imposm-managed OSM tables in the target database; logs under
+#          $SHARED_LOG_DIR.
+# Exit:    0 on success, non-zero on any failed stage (callers treat this as
+#          fatal). Do not invoke directly — only through the rbt CLI, which
+#          resolves and exports the environment this script expects.
+# =============================================================================
+
+# =============================================================================
 # OSM Data Import Script - Optimized for Containerized Environments
 # =============================================================================
 
@@ -45,6 +58,11 @@ readonly DIFF_START_SEQ="${DIFF_START_SEQ:-713}"
 readonly DIFF_END_SEQ="${DIFF_END_SEQ:-730}"
 readonly CLEANUP_ON_EXIT="${CLEANUP_ON_EXIT:-true}"
 readonly VALIDATE_DOWNLOADS="${VALIDATE_DOWNLOADS:-true}"
+# Minimum acceptable PBF size in MB for the sanity check. Defaults to a
+# planet-sized floor so a truncated multi-hour planet download is caught before
+# it silently proceeds into imposm. Override with OSM_MIN_PBF_SIZE_MB (e.g. 10)
+# when importing a small regional extract.
+readonly MIN_PBF_SIZE_MB="${OSM_MIN_PBF_SIZE_MB:-50000}"
 
 # Global variables
 PID_FILE="/tmp/osm_import.pid"
@@ -55,14 +73,13 @@ BACKGROUND_PIDS=()
 # Logging Functions
 # =============================================================================
 
-log() {
-    local level="$1"
-    shift
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local message="[$timestamp] [$level] $*"
-    echo "$message" | tee -a "$LOG_FILE"
-}
+# Shared rbt_log implementation (timestamp/PID formatting, colorized output,
+# file tee via rbt_log_init) — see scripts/lib/README.md.
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/logging.sh"
+rbt_log_init "$LOG_FILE"
 
+log() { rbt_log "$@"; }
 log_info() { log "INFO" "$@"; }
 log_warn() { log "WARN" "$@"; }
 log_error() { log "ERROR" "$@"; }
@@ -217,7 +234,7 @@ download_planet_file() {
     
     # Check if file already exists and is valid
     local planet_file="$DATA_DIR/planet-latest-v2.osm.pbf"
-    if [[ -f "$planet_file" ]] && validate_file "$planet_file" 50000; then
+    if [[ -f "$planet_file" ]] && validate_file "$planet_file" "$MIN_PBF_SIZE_MB"; then
         log_info "Planet file already exists and is valid, skipping download"
         return 0
     fi
@@ -233,7 +250,7 @@ download_planet_file() {
         --http-accept-gzip=true
         --user-agent="OpenMapTiles download-osm 7.1.1 (https://github.com/openmaptiles/openmaptiles-tools)"
         --dir="$DATA_DIR"
-        --out=planet-latest.osm.pbf
+        --out=planet-latest-v2.osm.pbf
         --auto-file-renaming=false
         --continue=true
         --max-tries=3
@@ -407,7 +424,7 @@ import_data() {
     
     cd "$DATA_DIR" || error_exit 5 "Cannot change to data directory"
     
-    validate_file "planet.osm.pbf" 50000 || error_exit 12 "Planet file not found for import"
+    validate_file "planet.osm.pbf" "$MIN_PBF_SIZE_MB" || error_exit 12 "Planet file not found for import"
     
     local imposm_args=(
         import
@@ -536,6 +553,9 @@ show_usage() {
     echo "  LOG_FILE          Log file path (default: ../logs/osm_import.log)"
     echo "  MAX_RETRIES       Maximum retry attempts (default: 3)"
     echo "  CLEANUP_ON_EXIT   Clean up temporary files on exit (default: true)"
+    echo "  OSM_MIN_PBF_SIZE_MB"
+    echo "                    Minimum PBF size in MB accepted by the import-stage"
+    echo "                    size check (default: 10; admits regional extracts)"
     echo "  DIFF_START_SEQ    Default start sequence for diffs (default: 713)"
     echo "  DIFF_END_SEQ      Default end sequence for diffs (default: 730)"
     echo ""
@@ -551,6 +571,17 @@ show_usage() {
 # =============================================================================
 # Individual Process Functions
 # =============================================================================
+
+# Placeholder health-check hook. Every run_* path calls this; it was previously
+# undefined, so under `set -e` the reference aborted every command but --help.
+# Container liveness/readiness is handled by the orchestrator (compose/k8s
+# healthchecks) rather than an in-script server, so this is intentionally a
+# no-op that simply records the configured port and returns success. Replace the
+# body with a real listener if in-process health serving is ever required.
+start_health_check_server() {
+    log_info "Health check hook (no-op); orchestrator owns liveness on port ${OSM_HEALTH_CHECK_PORT:-${HEALTH_CHECK_PORT:-8080}}"
+    return 0
+}
 
 run_download_planet() {
     log_info "Running planet download process only..."

@@ -1,0 +1,8 @@
+# hadolint configuration for Dockerfile.production.
+#
+# DL3008 (pin apt package versions) is intentionally ignored: the base image is
+# rolling Ubuntu plus the PGDG apt repo, where exact version pins go stale fast
+# and would break reproducible rebuilds rather than help them. All other rules
+# (including DL4006 pipefail and DL3003 WORKDIR) are enforced.
+ignored:
+  - DL3008
