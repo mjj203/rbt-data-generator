@@ -114,6 +114,10 @@ jobs:
           OSM_DATA_DIR: ${{ runner.temp }}/osm-data
           OSM_CACHE_DIR: ${{ runner.temp }}/osm-cache
           OSM_DIFF_DIR: ${{ runner.temp }}/osm-diff
+          # rbt.conf's defaults for these are relative paths, which the leaf
+          # script (running from its own directory) cannot resolve.
+          OSM_CONFIG_FILE: ${{ github.workspace }}/setup/data-sources/osm/imposm-config.json
+          OSM_MAPPING_FILE: ${{ github.workspace }}/setup/data-sources/osm/imposm-mapping.yaml
           # Admit the ~3.4 MB extract past the planet-scale size floor.
           OSM_MIN_PBF_SIZE_MB: "1"
         run: ~/.local/bin/uv run rbt --no-log-file setup --import-osm-data --osm-arg=--import
@@ -318,6 +322,8 @@ jobs:
           OSM_DATA_DIR: ${{ runner.temp }}/osm-data
           OSM_CACHE_DIR: ${{ runner.temp }}/osm-cache
           OSM_DIFF_DIR: ${{ runner.temp }}/osm-diff
+          OSM_CONFIG_FILE: ${{ github.workspace }}/setup/data-sources/osm/imposm-config.json
+          OSM_MAPPING_FILE: ${{ github.workspace }}/setup/data-sources/osm/imposm-mapping.yaml
           OSM_MIN_PBF_SIZE_MB: "1"
         run: |
           ~/.local/bin/uv run rbt --no-log-file setup --setup-database
