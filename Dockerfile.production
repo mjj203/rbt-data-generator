@@ -72,12 +72,18 @@ RUN apt-get update \
 
 # Python + GDAL via micromamba/conda-forge, so both track current upstream
 # releases regardless of what the base distro ships.
+#
+# conda-forge splits GDAL's optional format drivers into plugin packages:
+# `gdal` alone ships only libgdal-core, which has NO PostgreSQL driver.
+# libgdal-pg is required for every `ogr2ogr PG:` read/write in the
+# pipeline, and libgdal-arrow-parquet for the FieldMaps GeoParquet imports.
 ENV MAMBA_ROOT_PREFIX=/opt/conda
 RUN curl -fsSL "https://github.com/mamba-org/micromamba-releases/releases/download/${MICROMAMBA_VERSION}/micromamba-linux-64" \
          -o /usr/local/bin/micromamba \
     && chmod +x /usr/local/bin/micromamba \
     && micromamba create -y -n geo -c conda-forge \
-         "python=${PYTHON_VERSION}" "gdal=${GDAL_VERSION}" pip \
+         "python=${PYTHON_VERSION}" "gdal=${GDAL_VERSION}" \
+         "libgdal-pg=${GDAL_VERSION}" "libgdal-arrow-parquet=${GDAL_VERSION}" pip \
     && micromamba clean --all --yes
 ENV PATH="/opt/conda/envs/geo/bin:${PATH}"
 

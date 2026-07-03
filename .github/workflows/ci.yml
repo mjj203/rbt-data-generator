@@ -220,7 +220,7 @@ jobs:
           curl -fsSL "https://github.com/mamba-org/micromamba-releases/releases/download/2.8.1-0/micromamba-linux-64" \
             -o /usr/local/bin/micromamba
           sudo chmod +x /usr/local/bin/micromamba
-          MAMBA_ROOT_PREFIX="$HOME/micromamba" /usr/local/bin/micromamba create -y -n geo -c conda-forge gdal=3.13.1
+          MAMBA_ROOT_PREFIX="$HOME/micromamba" /usr/local/bin/micromamba create -y -n geo -c conda-forge gdal=3.13.1 libgdal-pg=3.13.1
           echo "$HOME/micromamba/envs/geo/bin" >> "$GITHUB_PATH"
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -235,6 +235,12 @@ jobs:
           ~/.local/bin/uv run rbt --no-log-file tiles --layer-type physical --projection 3857 --water --dry-run
           ~/.local/bin/uv run rbt --no-log-file tiles --layer-type cultural --projection 4326 --building --dry-run
           ~/.local/bin/uv run rbt --no-log-file schema run --all --dry-run
+      - name: Verify psql connectivity to the service container
+        # Unredirected on purpose: generate-tiles.sh's own pre-flight swallows
+        # psql's stderr, so any connection problem must surface here first.
+        run: |
+          command -v psql
+          psql "host=localhost port=5432 dbname=rbt user=rbt_user password=rbt_password" -c 'SELECT version()'
       - name: Dry-run validation (deprecated bash path)
         run: |
           ./production/generate-tiles.sh --layer-type physical --projection 3857 --water --dry-run
@@ -279,7 +285,7 @@ jobs:
           curl -fsSL "https://github.com/mamba-org/micromamba-releases/releases/download/2.8.1-0/micromamba-linux-64" \
             -o /usr/local/bin/micromamba
           sudo chmod +x /usr/local/bin/micromamba
-          MAMBA_ROOT_PREFIX="$HOME/micromamba" /usr/local/bin/micromamba create -y -n geo -c conda-forge gdal=3.13.1
+          MAMBA_ROOT_PREFIX="$HOME/micromamba" /usr/local/bin/micromamba create -y -n geo -c conda-forge gdal=3.13.1 libgdal-pg=3.13.1
           echo "$HOME/micromamba/envs/geo/bin" >> "$GITHUB_PATH"
       - name: Cache tippecanoe
         id: cache-tippecanoe
