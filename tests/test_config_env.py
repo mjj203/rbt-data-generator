@@ -104,3 +104,38 @@ def test_extensions_and_schemas_parsed_from_conf(fake_repo: Path) -> None:
     settings = load_settings()
     assert settings.database_extensions == ("postgis", "hstore")
     assert settings.database_schemas == ("rbt", "geonames", "overture")
+
+
+def test_nested_fallback_expansion(fake_repo: Path) -> None:
+    _write_conf(
+        fake_repo,
+        "DATABASE_NAME=${MY_DB:-${MY_FALLBACK:-innerdb}}\n",
+    )
+    assert load_settings().database_name == "innerdb"
+
+
+def test_nested_fallback_with_suffix_inside_default(fake_repo: Path) -> None:
+    # The OSM_LOG_FILE idiom: a nested expression plus literal text, all
+    # inside the outer default.
+    _write_conf(
+        fake_repo,
+        "DATABASE_HOST=${UNSET_HOST:-${INNER_HOST:-fallback.host}.suffix}\n",
+    )
+    assert load_settings().database_host == "fallback.host.suffix"
+
+
+def test_osm_connection_template_expands_like_bash(fake_repo: Path) -> None:
+    # The rbt.conf OSM_CONNECTION idiom: nested ${...} references inside the
+    # outer ${OSM_CONNECTION:-...} default must each expand (regression: a
+    # first-} regex scan leaked literal "${DATABASE_USER" into the URL).
+    _write_conf(
+        fake_repo,
+        "DATABASE_USER=alice\n"
+        "DATABASE_PASSWORD=secret\n"
+        "DATABASE_HOST=db.internal\n"
+        "DATABASE_PORT=5433\n"
+        "DATABASE_NAME=rbt\n"
+        "OSM_CONNECTION=${OSM_CONNECTION:-postgis://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}?prefix=NONE}\n",
+    )
+    settings = load_settings()
+    assert settings.imposm_connection() == "postgis://alice:secret@db.internal:5433/rbt?prefix=NONE"

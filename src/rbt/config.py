@@ -218,26 +218,61 @@ def _parse_conf_line(line: str, env: dict[str, str]) -> tuple[str, str] | None:
 def _expand_shell_vars(value: str, env: dict[str, str]) -> str:
     """Evaluate ``${VAR}``, ``${VAR:-default}``, ``${VAR:=default}`` expressions.
 
+    Defaults may nest further ``${...}`` expressions (bash allows
+    ``${A:-${B}/x}``; rbt.conf uses this for OSM_CONNECTION and
+    OSM_LOG_FILE), so the expression is located with a brace-matching scan
+    rather than a regex, which would stop at the first ``}``.
+
     Lookups and ``:=`` assignments operate on *env* (a local mapping), never on
     ``os.environ`` — parsing a config file must not mutate process state.
     """
+    result: list[str] = []
+    i = 0
+    while i < len(value):
+        if value.startswith("${", i):
+            end = _matching_brace(value, i + 2)
+            if end != -1:
+                result.append(_resolve_expr(value[i + 2 : end], env))
+                i = end + 1
+                continue
+        result.append(value[i])
+        i += 1
+    return "".join(result)
 
-    def resolve(match: re.Match[str]) -> str:
-        inner = match.group(1)
-        if ":-" in inner:
-            name, default = inner.split(":-", 1)
-            return env.get(name) or _expand_shell_vars(default, env)
-        if ":=" in inner:
-            name, default = inner.split(":=", 1)
-            existing = env.get(name)
-            if existing is not None and existing != "":
-                return existing
-            expanded = _expand_shell_vars(default, env)
-            env[name] = expanded
-            return expanded
-        return env.get(inner, "")
 
-    return re.sub(r"\$\{([^}]+)\}", resolve, value)
+def _matching_brace(value: str, start: int) -> int:
+    """Index of the ``}`` closing the ``${`` just before *start*, or -1."""
+    depth = 1
+    i = start
+    while i < len(value):
+        if value.startswith("${", i):
+            depth += 1
+            i += 2
+            continue
+        if value[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+
+def _resolve_expr(inner: str, env: dict[str, str]) -> str:
+    # The operator is whichever of :- / := appears first (the variable name
+    # itself cannot contain a colon).
+    dash, assign = inner.find(":-"), inner.find(":=")
+    if dash != -1 and (assign == -1 or dash < assign):
+        name, default = inner[:dash], inner[dash + 2 :]
+        return env.get(name) or _expand_shell_vars(default, env)
+    if assign != -1:
+        name, default = inner[:assign], inner[assign + 2 :]
+        existing = env.get(name)
+        if existing is not None and existing != "":
+            return existing
+        expanded = _expand_shell_vars(default, env)
+        env[name] = expanded
+        return expanded
+    return env.get(inner, "")
 
 
 def _read_conf(path: Path, env: dict[str, str]) -> dict[str, str]:
