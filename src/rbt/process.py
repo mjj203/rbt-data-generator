@@ -14,14 +14,17 @@ from .logging import get_logger
 
 log = get_logger(__name__)
 
-# Redact libpq/OGR ``password=...`` tokens before anything is logged or put into
-# an exception message. Secrets are normally supplied via PGPASSWORD (env), but
-# this is a defense-in-depth guard for any conninfo that still carries one.
+# Redact secrets before anything is logged or put into an exception message:
+# libpq/OGR ``password=...`` tokens, and URL userinfo passwords
+# (``scheme://user:secret@host`` — imposm's postgis:// connection embeds the
+# password this way and does not read PGPASSWORD).
 _SECRET_RE = re.compile(r"(?i)(password=)[^\s'\"]+")
+_URL_USERINFO_RE = re.compile(r"(\w+://[^\s:/@']+):[^\s@']+@")
 
 
 def _redact(text: str) -> str:
-    return _SECRET_RE.sub(r"\1***", text)
+    text = _SECRET_RE.sub(r"\1***", text)
+    return _URL_USERINFO_RE.sub(r"\1:***@", text)
 
 
 class CommandFailed(RuntimeError):

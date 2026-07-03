@@ -38,12 +38,13 @@ REQUIRED_TOOLS: dict[str, str] = {
     "imposm": "Imposm3 OSM import tool",
     "tippecanoe": "Mapbox vector tile generation",
     "tile-join": "Tippecanoe tile joining tool",
-    "wget": "File download utility",
+    "aria2c": "aria2 segmented downloader (OSM planet)",
+    "osmium": "osmium-tool (OSM diff merging)",
+    "osmosis": "Osmosis (OSM change application)",
     "aws": "AWS CLI (for Overture data)",
 }
 
 OPTIONAL_TOOLS: dict[str, str] = {
-    "7z": "7-Zip archive utility",
     "sqlite3": "SQLite database utility",
     "docker": "Docker containerization",
 }
@@ -54,8 +55,6 @@ REQUIRED_PATHS: tuple[str, ...] = (
     "config/layers.yml",
     "setup/data-sources/osm/imposm-config.json",
     "setup/data-sources/osm/imposm-mapping.yaml",
-    "setup/data-sources/osm/import-osm-data.sh",
-    "setup/data-sources/reference-data/import-reference-data.sh",
     "setup/data-sources/schemas/cultural/cultural-core.sql",
     "setup/data-sources/schemas/physical/physical-core.sql",
 )

@@ -19,7 +19,7 @@ projection:
 graph TD
     CLI["rbt CLI — the only orchestrator<br/>(src/rbt/)"]
 
-    subgraph importers["Data importers — bash leaf scripts (rbt import …)"]
+    subgraph importers["Data importers — native Python (rbt import …)"]
         OSM["osm<br/>planet PBF via imposm3"]
         REF["reference<br/>Natural Earth, FieldMaps, OurAirports"]
         GEO["geonames<br/>NGA GNS names"]
@@ -51,36 +51,32 @@ graph TD
     VIEWS --> MVT
 ```
 
-### Orchestration Rule (the "hybrid" architecture)
+### Orchestration Rule
 
-The dispatch rule is strict and one-directional:
-
-- The `rbt` CLI is the **only** orchestrator. No bash script calls Python,
-  and no bash script calls another bash script.
-- Four data importers remain bash **leaf scripts** by design (download +
-  load of external datasets, reached via `rbt import {osm,reference,geonames,buildings}`).
-  Each carries a `CONTRACT` header documenting its inputs and environment.
-- Everything else — database bootstrap, schema processing, OSM update
-  supervision, tile generation, health checks — is native Python under
-  `src/rbt/`.
-- Tile generation is fully native; the legacy bash generators were removed
-  after output parity was verified (see the
-  [parity runbook](parity-runbook.md) completion note).
+All orchestration is native Python under `src/rbt/` — database bootstrap,
+data import, schema processing, OSM update supervision, tile generation,
+and health checks. There is no bash in the runtime path; external
+geospatial binaries (ogr2ogr, imposm, tippecanoe, aria2c, aws, osmium,
+osmosis) are invoked as subprocesses via `rbt.process`. Tile generation
+went native first — the legacy bash generators were removed after output
+parity was verified (see the [parity runbook](parity-runbook.md)
+completion note) — and the four data importers followed as declarative
+dataset registries under `src/rbt/importers/`.
 
 ## 📂 Directory Architecture
 
 ### Separation of Concerns
 
-The project is organized around the orchestrator/leaf split. See the
+The project keeps code and data contracts apart. See the
 [Project Tour](project-structure.md#repository-layout) for the full annotated
 directory tree — kept in one place so it can't drift between documents; the
 summary here is just the shape of the split:
 
-- **`src/rbt/`** — the Python CLI, the *only* orchestrator (`cli.py` +
-  `commands/` for the Typer surface, `tiles/` for the two tile-generation
-  backends, `importers/` for the bash-leaf wrappers).
-- **`setup/data-sources/`** — the four bash leaf importers + PL/pgSQL schema
-  sources.
+- **`src/rbt/`** — the Python CLI (`cli.py` + `commands/` for the Typer
+  surface, `tiles/` for the two tile-generation backends, `importers/` for
+  the native data importers).
+- **`setup/data-sources/`** — imposm config + mapping and the PL/pgSQL
+  schema sources.
 - **`config/`** — `rbt.conf`, `layers.yml`, and the service configs
   (`postgresql.conf`, `tile-server.json`, `prometheus.yml`).
 - **`tests/`**, **`docs/`**, **`output/`** — pytest suite, this MkDocs site,
@@ -93,7 +89,7 @@ summary here is just the shape of the split:
 **Key Components**:
 - `src/rbt/setup_db.py` - Creates the database and extensions via psycopg,
   then sequences the steps in dependency order
-- `setup/data-sources/` - Bash leaf importers organized by source type
+- `src/rbt/importers/` - Native importers, one module per data source
 - `setup/data-sources/schemas/` - PL/pgSQL files run by `rbt schema run`
 
 **Execution Pattern**: Run once when setting up a new system
@@ -125,9 +121,9 @@ sequenceDiagram
     
     User->>Setup: rbt setup --all
     Setup->>DB: CREATE DATABASE + EXTENSIONS (psycopg)
-    Setup->>OSM: Import OSM planet data (bash leaf → imposm3)
+    Setup->>OSM: Import OSM planet data (imposm3)
     OSM->>DB: Raw OSM tables (import schema)
-    Setup->>Ref: Import reference datasets (bash leaves)
+    Setup->>Ref: Import reference datasets (native importers)
     Ref->>DB: Reference tables (multiple schemas)
     Setup->>Schema: psql -v ON_ERROR_STOP=1 -f <unit>.sql
     Schema->>DB: Optimized views (rbt schema)
@@ -264,7 +260,7 @@ The CLI loads `rbt.conf` into an immutable `Settings` object
 (`src/rbt/config.py`) with the precedence **CLI overrides → environment
 variables → `config/rbt.conf` → built-in defaults**. Loading settings never
 mutates the process environment; values destined for child processes (psql,
-ogr2ogr, the bash leaf scripts) are passed explicitly as a bundled
+ogr2ogr, imposm) are passed explicitly as a bundled
 `PG*`/`PG_*`/`DATABASE_*` environment. See the
 [Configuration Reference](configuration.md) for every variable.
 
@@ -349,7 +345,7 @@ Every mutating `rbt` invocation tees its output to a timestamped file under
 output/logs/
 ├── rbt_<timestamp>.log            # Per-invocation CLI log (--log-file overrides)
 ├── schema_<key>_<timestamp>.log   # psql output per schema unit
-└── osm_import.log                 # Planet import leaf script
+└── <importer>_<job>_<timestamp>.log  # Per-job importer logs (downloads/ingests)
 
 output/tiles/<type>/<projection>/
 ├── <layer>_<projection>.log       # Per-layer export + tippecanoe log

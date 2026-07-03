@@ -30,17 +30,17 @@ flowchart LR
 
 ## OpenStreetMap
 
-- **Importer:** `rbt import osm` → `setup/data-sources/osm/import-osm-data.sh`
+- **Importer:** `rbt import osm` → `src/rbt/importers/osm.py`
 - **License:** [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/) —
   attribution "© OpenStreetMap contributors" is **mandatory**, share-alike
   applies to derivative databases. See the
   [OSM copyright page](https://www.openstreetmap.org/copyright).
 - **Download mechanism:** `aria2c` fetches `planet-latest.osm.pbf` from a
   mirror pool (spline.de, gwdg.de, fau.de, your.org, bbbike.org, nluug.nl,
-  osuosl.org, utwente.nl, planet.openstreetmap.org); `wget` fetches daily
-  replication diffs from `planet.openstreetmap.org/replication/day/`. Diffs
-  are merged with `osmium`, applied with `osmosis`, and the result is
-  imported by **imposm3** using
+  osuosl.org, utwente.nl, planet.openstreetmap.org); the importer fetches
+  daily replication diffs from `planet.openstreetmap.org/replication/day/`
+  in parallel. Diffs are merged with `osmium`, applied with `osmosis`, and
+  the result is imported by **imposm3** using
   `setup/data-sources/osm/imposm-mapping.yaml`.
 - **Update cadence:** OSM publishes new planet files weekly and replication
   diffs daily/minutely. After the initial import, `rbt osm run` keeps the
@@ -72,8 +72,7 @@ and carry the same ODbL terms as OSM itself.
 
 ## FieldMaps administrative boundaries
 
-- **Importer:** `rbt import reference` →
-  `setup/data-sources/reference-data/import-reference-data.sh`
+- **Importer:** `rbt import reference` → `src/rbt/importers/reference.py`
 - **Two distinct editions are used — they have different provenance:**
     - **ADM0** (country polygons, lines, label points) comes from the
       [ADM0 OSM edition](https://fieldmaps.io/data/adm0), "all" worldview
@@ -138,19 +137,19 @@ and carry the same ODbL terms as OSM itself.
 
 ## NGA GNS and USGS GNIS gazetteers
 
-- **Importer:** `rbt import geonames` →
-  `setup/data-sources/reference-data/import-geonames.sh`
+- **Importer:** `rbt import geonames` → `src/rbt/importers/geonames.py`
 - **License:** U.S. Government works — public domain. NGA states there are
   "no licensing requirements or restrictions in place for the use of the GNS
   data"; the same applies to USGS GNIS.
-- **Download mechanism:** `wget` fetches nine GNS feature-class zips
+- **Download mechanism:** the importer fetches nine GNS feature-class zips
   (Administrative_Regions, Hydrographic, Hypsographic, Populated_Places,
   Areas_Localities, Undersea, Transportation_Networks, Spot_Features,
-  Vegetation) from `geonames.nga.mil/geonames/GNSData/fc_files/`, plus two
-  US-national GNIS files (PopulatedPlaces_National,
+  Vegetation) from `geonames.nga.mil/geonames/GNSData/fc_files/` in
+  parallel, plus two US-national GNIS files (PopulatedPlaces_National,
   HistoricalFeatures_National) from the USGS National Map S3 bucket
-  (`prd-tnm.s3.amazonaws.com`). Tab-separated text is converted to CSV and
-  loaded with `ogr2ogr` into the `geonames` schema.
+  (`prd-tnm.s3.amazonaws.com`). Tab-separated text is converted to CSV
+  (fields containing commas are quoted correctly) and loaded with `ogr2ogr`
+  into the `geonames` schema.
 - **Update cadence:** NGA refreshes GNS export files on a recurring schedule;
   USGS refreshes GNIS files periodically. The importer fetches the current
   files (no version pin).
@@ -171,8 +170,7 @@ and carry the same ODbL terms as OSM itself.
 
 ## Overture Maps buildings
 
-- **Importer:** `rbt import buildings` →
-  `setup/data-sources/reference-data/import-buildings.sh`
+- **Importer:** `rbt import buildings` → `src/rbt/importers/buildings.py`
 - **License:** [ODbL 1.0](https://docs.overturemaps.org/attribution/). The
   Overture buildings theme incorporates OpenStreetMap (plus
   Microsoft ML Building Footprints, Esri Community Maps, Google Open
@@ -180,20 +178,22 @@ and carry the same ODbL terms as OSM itself.
   Required attribution: "© OpenStreetMap contributors, Overture Maps
   Foundation".
 - **Download mechanism:** `aws s3 sync --no-sign-request` against
-  `s3://overturemaps-us-west-2/release/2026-06-17.0/theme=buildings/`,
-  then `ogr2ogr` loads `type=building` and `type=building_part` GeoParquet
-  into `overture.building` / `overture.buildingpart`. An alternative
-  high-throughput path, `tools/duckdb-building-export.sql` (see
+  `s3://overturemaps-us-west-2/release/2026-06-17.0/theme=buildings/`
+  (release pinned via `OVERTURE_RELEASE`, overridable per run with
+  `rbt import buildings --release`), then `ogr2ogr` loads `type=building`
+  and `type=building_part` GeoParquet into `overture.building` /
+  `overture.buildingpart`. An alternative high-throughput path,
+  `tools/duckdb-building-export.sql` (see
   [DuckDB Buildings Export](duckdb-buildings.md)), reads the GeoParquet
-  directly with DuckDB and exports FlatGeoBuf — both scripts are pinned to
+  directly with DuckDB and exports FlatGeoBuf — both paths are pinned to
   the same release.
 - **Update cadence:** Overture publishes versioned releases roughly monthly
   and only retains a rolling window of recent releases on the public S3
   bucket (older releases 404 once superseded) — verify with `aws s3 ls
   --no-sign-request --region us-west-2 s3://overturemaps-us-west-2/release/`
   before pinning a new one. Bumping the release is a deliberate change that
-  must update **both** the importer and the DuckDB script together, since
-  they are expected to reference the same release.
+  must update **both** the `OVERTURE_RELEASE` default and the DuckDB script
+  together, since they are expected to reference the same release.
 - **Feeds:** the `building` layer (`rbt.building`, plus the area-filtered
   `rbt.building_z10/z11/z12` zoom variants used by the 4326 backend).
 
@@ -205,10 +205,12 @@ and carry the same ODbL terms as OSM itself.
   work it is public domain; the download page publishes no explicit license
   text, so **verify before release** if you redistribute this layer
   commercially.
-- **Download mechanism:** `wget` fetches `installations_ranges.zip` from
-  `www.acq.osd.mil/eie/imr/rpid/disdi/Downloads/`, and `ogr2ogr` loads the
-  `MirtaLocations_A` feature class from `FY23_MIRTA_Final.gdb` into
-  `mirta.us_military_installations`.
+- **Download mechanism:** the importer fetches `installations_ranges.zip`
+  from `www.acq.osd.mil/eie/imr/rpid/disdi/Downloads/` (with a documented
+  TLS-verification exception — see
+  [SECURITY.md](https://github.com/MJJ203/rbt-data-generator/blob/main/SECURITY.md)),
+  and `ogr2ogr` loads the `MirtaLocations_A` feature class from
+  `FY23_MIRTA_Final.gdb` into `mirta.us_military_installations`.
 - **Update cadence:** annual fiscal-year releases; the importer pins FY23.
 - **Feeds:** `us_military_installations` and
   `us_military_installations_labels`.

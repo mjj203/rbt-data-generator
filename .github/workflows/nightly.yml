@@ -13,6 +13,9 @@ on:
     - cron: "17 6 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   # See ci.yml for why both are needed under GitHub Actions.
   NO_COLOR: "1"
@@ -52,8 +55,8 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
-          # aria2/osmium-tool/osmosis: the OSM importer validates its full
-          # dependency list even when only the `--import` stage runs.
+          # aria2/osmium-tool/osmosis: the full importer toolset (rbt
+          # validate's REQUIRED_TOOLS); only imposm runs in the import stage.
           sudo apt-get install -y postgresql-client-18 sqlite3 aria2 osmium-tool osmosis
       - name: Install GDAL via micromamba
         run: |
@@ -107,16 +110,13 @@ jobs:
           OSM_DATA_DIR: ${{ runner.temp }}/osm-data
           OSM_CACHE_DIR: ${{ runner.temp }}/osm-cache
           OSM_DIFF_DIR: ${{ runner.temp }}/osm-diff
-          # rbt.conf's defaults for these are relative paths, which the leaf
-          # script (running from its own directory) cannot resolve.
+          # Explicit absolute paths; rbt.conf's relative defaults also work
+          # for the native importer (cwd is the workspace throughout).
           OSM_CONFIG_FILE: ${{ github.workspace }}/setup/data-sources/osm/imposm-config.json
           OSM_MAPPING_FILE: ${{ github.workspace }}/setup/data-sources/osm/imposm-mapping.yaml
-          # Like the config/mapping paths, the default log path is relative
-          # and unreachable from the leaf script's own working directory.
-          OSM_LOG_FILE: ${{ runner.temp }}/osm_import.log
           # Admit the ~3.4 MB extract past the planet-scale size floor.
           OSM_MIN_PBF_SIZE_MB: "1"
-        run: ~/.local/bin/uv run rbt --no-log-file setup --import-osm-data --osm-arg=--import
+        run: ~/.local/bin/uv run rbt --no-log-file setup --import-osm-data --osm-stage import
       - name: Seed reference-table stubs
         run: |
           psql "host=localhost port=5432 dbname=rbt user=rbt_user password=rbt_password" \

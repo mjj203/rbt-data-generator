@@ -14,10 +14,9 @@ uv run pytest
 uv run ruff check src tests
 uv run mypy src
 
-# Bash leaf scripts: lint locally
+# Standalone shell utilities (tools/ only): lint locally
 brew install shellcheck hadolint   # or apt-get install
-find setup production scripts tools -name "*.sh" -print0 \
-  | xargs -0 shellcheck -x
+find tools -name "*.sh" -print0 | xargs -0 shellcheck -x
 
 # SQL: lint with sqlfluff
 uv run --with "sqlfluff>=3.0" sqlfluff lint setup/data-sources/schemas --dialect postgres
@@ -38,14 +37,15 @@ overwrite it.
 
 ## Architecture rule
 
-**Only the `rbt` CLI dispatches.** No bash script calls Python; no bash script
-calls another bash script. The bash that remains is leaf-only:
-
-- the four data importers under `setup/data-sources/` (reached via
-  `rbt import ...` / `rbt setup`).
+All orchestration and data loading is Python (`src/rbt/`). External
+geospatial binaries — ogr2ogr, imposm, tippecanoe/tile-join, aria2c, osmium,
+osmosis, aws — are invoked as subprocesses via `rbt.process`. There is no
+bash in the runtime path.
 
 New orchestration logic belongs in `src/rbt/`; new layer definitions belong in
 [`config/layers.yml`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/layers.yml), never in bash.
+(The only shell scripts left are standalone utilities under `tools/`, outside
+the runtime path.)
 
 ## Branching and commits
 
@@ -60,7 +60,7 @@ New orchestration logic belongs in `src/rbt/`; new layer definitions belong in
 Before requesting review:
 
 - [ ] `uv run ruff check src tests`, `uv run mypy src`, and `uv run pytest` pass
-- [ ] `shellcheck` clean on any touched `.sh` file
+- [ ] `shellcheck` clean on any touched `.sh` file under `tools/`
 - [ ] `sqlfluff lint` clean on any touched `.sql` file
 - [ ] `hadolint` clean on any touched Dockerfile
 - [ ] Docs updated (README, `docs/*.md`) for any user-visible change

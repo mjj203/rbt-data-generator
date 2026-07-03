@@ -26,12 +26,12 @@ graph TD
     I[OSM replication diffs] -->|rbt osm run| E
 ```
 
-The Python `rbt` CLI orchestrates everything. The four `rbt import` subcommands delegate to contract-documented bash leaf scripts under `setup/data-sources/`; every other step (database bootstrap, schema processing, tile generation, health checks) runs natively in Python.
+The Python `rbt` CLI orchestrates everything — the pipeline is fully native Python. The four `rbt import` subcommands are implemented in `src/rbt/importers/`; database bootstrap, schema processing, tile generation, and health checks are native too. External geospatial binaries (ogr2ogr, imposm, aria2c, osmium, osmosis, aws) are invoked as subprocesses.
 
 ## Prerequisites
 
 - **Docker and Docker Compose** — used for PostGIS and the tile server in this tutorial (and optionally for the CLI itself).
-- **If you run the CLI locally**: Python 3.13+, [uv](https://docs.astral.sh/uv/), and the geospatial toolchain — `psql`, GDAL/OGR (`ogr2ogr`), `imposm`, `tippecanoe` + `tile-join`, `wget`, and the `aws` CLI. [Installation](installation.md) covers installing each tool; `rbt validate` (Step 3) verifies them for you.
+- **If you run the CLI locally**: Python 3.13+, [uv](https://docs.astral.sh/uv/), and the geospatial toolchain — `psql`, GDAL/OGR (`ogr2ogr`), `imposm`, `tippecanoe` + `tile-join`, `aria2c`, `osmium`, `osmosis`, and the `aws` CLI. [Installation](installation.md) covers installing each tool; `rbt validate` (Step 3) verifies them for you.
 
 Hardware expectations depend heavily on the size of your extract; see [Performance & Sizing](performance.md) before attempting anything larger than a country.
 
@@ -103,7 +103,7 @@ If you plan to use the Docker Compose services, also copy `env.example` to `.env
     docker compose --profile setup run --rm rbt-setup rbt validate
     ```
 
-`rbt validate` checks your configuration, the required external tools (`psql`, `ogr2ogr`, `imposm`, `tippecanoe`, `tile-join`, `wget`, `aws`), the database connection, disk space, memory, and the project structure.
+`rbt validate` checks your configuration, the required external tools (`psql`, `ogr2ogr`, `imposm`, `tippecanoe`, `tile-join`, `aria2c`, `osmium`, `osmosis`, `aws`), the database connection, disk space, memory, and the project structure.
 
 !!! note "Warnings are expected on a fresh database"
     Before setup, `validate` warns that the `rbt` schemas don't exist yet (``Schema 'rbt' not found (run `rbt setup`)``). Errors are what matter at this stage — typically a missing tool or unreachable database.
@@ -113,7 +113,7 @@ If you plan to use the Docker Compose services, also copy `env.example` to `.env
 [Geofabrik](https://download.geofabrik.de/) publishes daily OSM extracts using the URL pattern `https://download.geofabrik.de/<region>/<area>-latest.osm.pbf`. For example, Switzerland:
 
 ```bash
-wget -O "$OSM_DATA_DIR/planet.osm.pbf" \
+curl -Lo "$OSM_DATA_DIR/planet.osm.pbf" \
   https://download.geofabrik.de/europe/switzerland-latest.osm.pbf
 ```
 
@@ -142,12 +142,12 @@ This bootstraps the database natively (no shell scripts): it creates the `rbt` d
 
 ### OSM extract
 
-`rbt import osm` passes everything after `--` straight through to the leaf script, which exposes one flag per pipeline stage. For a pre-downloaded extract you only need the import stage:
+`rbt import osm` selects its pipeline stage with the typed `--stage` option. For a pre-downloaded extract you only need the import stage:
 
 === "Local (uv)"
 
     ```bash
-    uv run rbt import osm -- --import
+    uv run rbt import osm --stage import
     ```
 
 === "Docker"
@@ -160,21 +160,21 @@ This bootstraps the database natively (no shell scripts): it creates the `rbt` d
       -e OSM_CACHE_DIR=/app/output/osm/cache \
       -e OSM_DIFF_DIR=/app/output/osm/diff \
       -e OSM_CONNECTION="postgis://rbt_user:rbt_password@postgres/rbt?prefix=NONE" \
-      rbt-setup rbt import osm -- --import
+      rbt-setup rbt import osm --stage import
     ```
 
-This runs `imposm import` with the project's mapping (`setup/data-sources/osm/imposm-mapping.yaml`), writing OSM tables in EPSG:3857 and recording diff state so replication can pick up later.
+This runs `imposm import` with the project's mapping (`setup/data-sources/osm/imposm-mapping.yaml`), writing OSM tables in EPSG:4326 (`OSM_SRID`) and recording diff state so replication can pick up later.
 
-The other pass-through stages (run `rbt import osm -- --help` for the full list):
+The other stages (run `rbt import osm --help` for the full list):
 
-| Stage | What it does |
+| `--stage` | What it does |
 |---|---|
-| `--all` | Download the planet, fetch and apply diffs, import, then start `imposm run` |
-| `--download-planet` | Download the planet PBF from a mirror list |
-| `--download-diffs START END` | Fetch daily replication diffs by sequence number |
-| `--merge-diffs` / `--apply-changes` | Merge diffs and apply them to the PBF with osmosis |
-| `--import` | Import `$OSM_DATA_DIR/planet.osm.pbf` with imposm3 |
-| `--import-diff` | Apply downloaded `.osc.gz` changesets as a one-time update |
+| `all` *(default)* | Download the planet, fetch and apply diffs, then import — the pipeline finishes and returns (continuous replication is `rbt osm run`) |
+| `download-planet` | Download the planet PBF from a mirror list |
+| `download-diffs` | Fetch daily replication diffs by sequence number (`--start-seq` / `--end-seq`) |
+| `merge-diffs` / `apply-changes` | Merge diffs with osmium and apply them to the PBF with osmosis |
+| `import` | Import `$OSM_DATA_DIR/planet.osm.pbf` with imposm3 |
+| `import-diff` | Apply downloaded `.osc.gz` changesets as a one-time update |
 
 ### Reference data
 

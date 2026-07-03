@@ -10,7 +10,6 @@ from typing import cast
 
 import pytest
 
-import rbt.bash
 import rbt.process
 import rbt.schema
 import rbt.tiles.exporter
@@ -191,7 +190,6 @@ def recorded_run(monkeypatch) -> RecordedRun:
     monkeypatch.setattr(rbt.tiles.tile_join, "run", recorder, raising=False)
     monkeypatch.setattr(rbt.tiles.gdal_mvt, "run", recorder)
     monkeypatch.setattr(rbt.schema, "run", recorder)
-    monkeypatch.setattr(rbt.bash, "run", recorder)
     return recorder
 
 

@@ -1,8 +1,7 @@
 """Database bootstrap and setup orchestration (``rbt setup``).
 
-Replaces ``setup/init-database.sh``: creates the database and extensions via
-psycopg, then sequences the data importers (which remain bash leaf scripts,
-called through :mod:`rbt.importers`) and schema processing.
+Creates the database and extensions via psycopg, then sequences the native
+data importers (:mod:`rbt.importers`) and schema processing.
 """
 
 from __future__ import annotations
@@ -17,6 +16,7 @@ from .importers import buildings as buildings_importer
 from .importers import geonames as geonames_importer
 from .importers import osm as osm_importer
 from .importers import reference as reference_importer
+from .importers.osm import OsmStage
 from .layers import LayerRegistry
 from .logging import get_logger
 from .schema import run_schemas
@@ -99,28 +99,28 @@ def run_setup(
     registry: LayerRegistry,
     steps: SetupSteps,
     *,
-    osm_args: list[str] | None = None,
+    osm_stage: OsmStage = OsmStage.all,
     dry_run: bool = False,
 ) -> None:
     """Run the selected initialization steps in dependency order.
 
-    *osm_args* is passed through to the OSM leaf script, which requires a
-    stage flag; when none are given the full workflow (``--all``) runs.
+    *osm_stage* selects which part of the OSM workflow the import step runs
+    (default: the complete download → import pipeline).
     """
     if steps.bootstrap:
         bootstrap(settings, dry_run=dry_run)
     if steps.import_osm:
         log.info("importing OSM data (this may take several hours)")
-        osm_importer.import_osm(settings, list(osm_args or ["--all"]), dry_run=dry_run)
+        osm_importer.run_import(settings, osm_stage, dry_run=dry_run)
     if steps.import_reference:
         log.info("importing reference datasets")
-        reference_importer.import_reference(settings, [], dry_run=dry_run)
+        reference_importer.import_reference(settings, dry_run=dry_run)
     if steps.import_geonames:
         log.info("importing GeoNames (NGA GNS) data")
-        geonames_importer.import_geonames(settings, [], dry_run=dry_run)
+        geonames_importer.import_geonames(settings, dry_run=dry_run)
     if steps.import_buildings:
         log.info("importing Overture buildings")
-        buildings_importer.import_buildings(settings, [], dry_run=dry_run)
+        buildings_importer.import_buildings(settings, dry_run=dry_run)
     if steps.process_schemas:
         log.info("processing database schemas")
         run_schemas(settings, registry, dry_run=dry_run)

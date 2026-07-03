@@ -47,7 +47,7 @@ RBT Vector Tiles is an open-source pipeline that turns authoritative geospatial 
 
 - **Multi-projection output** — Web Mercator (3857) and World Mercator (3395) rendered with tippecanoe and merged with `tile-join`; geographic (4326) rendered natively by GDAL's MVT driver in a single multi-table pass.
 - **Declarative layer registry** — every layer, zoom window, projection set, and tippecanoe filter lives in `config/layers.yml`; inspect it with `rbt layers list` and `rbt layers show KEY`.
-- **One orchestrator** — the `rbt` CLI dispatches every step. Four data importers remain bash leaf scripts with documented contracts; nothing else shells between scripts.
+- **One orchestrator, fully native** — the `rbt` CLI dispatches every step of a fully native Python pipeline, including the four data importers (`src/rbt/importers/`); external geospatial binaries are invoked as subprocesses, and no bash remains in the runtime path.
 - **Container-native** — PostGIS, one-shot setup, continuous OSM updates, tile serving, smoke tests, and monitoring are Docker Compose profiles (`setup`, `production`, `serve`, `smoke`, `monitoring`).
 - **Built-in checks** — `rbt validate`, `rbt health`, and `rbt smoke` run natively in Python; `health` doubles as the container HEALTHCHECK.
 - **Continuous OSM updates** — `rbt osm run` supervises `imposm run` replication with clean signal handling, plus `status` and `stop` commands.
@@ -59,7 +59,7 @@ RBT Vector Tiles is an open-source pipeline that turns authoritative geospatial 
 
 ## Requirements at a glance
 
-The pipeline shells out to PostgreSQL/PostGIS, GDAL/OGR, imposm3, and tippecanoe; `rbt validate` checks for all of them. Tool installation is covered in [Installation](installation.md), and hardware sizing — from a laptop for a country extract to server-class hardware for the planet — in [Performance & Sizing](performance.md).
+The pipeline shells out to PostgreSQL/PostGIS, GDAL/OGR, imposm3, tippecanoe, aria2, osmium-tool, osmosis, and the AWS CLI; `rbt validate` checks for all of them. Tool installation is covered in [Installation](installation.md), and hardware sizing — from a laptop for a country extract to server-class hardware for the planet — in [Performance & Sizing](performance.md).
 
 ## License and attribution
 

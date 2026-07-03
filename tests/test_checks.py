@@ -86,8 +86,6 @@ def test_health_missing_tools_warn_but_stay_healthy(
 _REQUIRED_EXTRA_PATHS = (
     "setup/data-sources/osm/imposm-config.json",
     "setup/data-sources/osm/imposm-mapping.yaml",
-    "setup/data-sources/osm/import-osm-data.sh",
-    "setup/data-sources/reference-data/import-reference-data.sh",
 )
 
 
@@ -138,9 +136,11 @@ def test_validate_missing_required_tool_exits_1(
 def test_validate_missing_optional_tool_only_warns(
     healthy_env: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
-    monkeypatch.setattr(shutil, "which", lambda tool: None if tool == "7z" else f"/usr/bin/{tool}")
+    monkeypatch.setattr(
+        shutil, "which", lambda tool: None if tool == "docker" else f"/usr/bin/{tool}"
+    )
     assert checks.validate(load_settings()) == 0
-    assert "7z not found (optional)" in capsys.readouterr().out
+    assert "docker not found (optional)" in capsys.readouterr().out
 
 
 def test_validate_database_connection_error_exits_1(

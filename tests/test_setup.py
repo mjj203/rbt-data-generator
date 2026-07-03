@@ -58,7 +58,7 @@ def call_order(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         return _fake
 
     monkeypatch.setattr(setup_db, "bootstrap", _record("bootstrap"))
-    monkeypatch.setattr(osm, "import_osm", _record("osm"))
+    monkeypatch.setattr(osm, "run_import", _record("osm"))
     monkeypatch.setattr(reference, "import_reference", _record("reference"))
     monkeypatch.setattr(geonames, "import_geonames", _record("geonames"))
     monkeypatch.setattr(buildings, "import_buildings", _record("buildings"))
@@ -83,62 +83,60 @@ def test_run_setup_nothing_selected_runs_nothing(fake_repo: Path, call_order: li
 
 
 # ---------------------------------------------------------------------------
-# OSM import args (the leaf script exits non-zero when called with no stage flag)
+# OSM stage selection
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-def osm_dispatch(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
-    """Capture the args run_setup hands to the OSM importer."""
-    calls: list[list[str]] = []
+def osm_dispatch(monkeypatch: pytest.MonkeyPatch) -> list[osm.OsmStage]:
+    """Capture the stage run_setup hands to the OSM importer."""
+    stages: list[osm.OsmStage] = []
 
-    def _fake(settings: Settings, args: list[str], *, dry_run: bool = False) -> None:
-        calls.append(list(args))
+    def _fake(
+        settings: Settings,
+        stage: osm.OsmStage,
+        *,
+        start_seq: int | None = None,
+        end_seq: int | None = None,
+        dry_run: bool = False,
+    ) -> None:
+        stages.append(stage)
 
-    monkeypatch.setattr(osm, "import_osm", _fake)
-    return calls
+    monkeypatch.setattr(osm, "run_import", _fake)
+    return stages
 
 
-def test_run_setup_defaults_osm_args_to_all(fake_repo: Path, osm_dispatch: list[list[str]]) -> None:
+def test_run_setup_defaults_osm_stage_to_all(
+    fake_repo: Path, osm_dispatch: list[osm.OsmStage]
+) -> None:
     steps = setup_db.SetupSteps(import_osm=True)
     setup_db.run_setup(load_settings(), load_registry(), steps)
-    assert osm_dispatch == [["--all"]]
+    assert osm_dispatch == [osm.OsmStage.all]
 
 
-def test_run_setup_passes_explicit_osm_args(fake_repo: Path, osm_dispatch: list[list[str]]) -> None:
+def test_run_setup_passes_explicit_osm_stage(
+    fake_repo: Path, osm_dispatch: list[osm.OsmStage]
+) -> None:
     steps = setup_db.SetupSteps(import_osm=True)
-    setup_db.run_setup(load_settings(), load_registry(), steps, osm_args=["--import"])
-    assert osm_dispatch == [["--import"]]
+    setup_db.run_setup(load_settings(), load_registry(), steps, osm_stage=osm.OsmStage.import_)
+    assert osm_dispatch == [osm.OsmStage.import_]
 
 
-@pytest.fixture
-def osm_leaf_script(fake_repo: Path) -> Path:
-    script = fake_repo / "setup/data-sources/osm/import-osm-data.sh"
-    script.parent.mkdir(parents=True, exist_ok=True)
-    script.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-    script.chmod(0o755)
-    return fake_repo
-
-
-def test_setup_cli_osm_step_dispatches_all_by_default(osm_leaf_script: Path, recorded_run) -> None:
+def test_setup_cli_osm_step_dispatches_all_by_default(
+    fake_repo: Path, osm_dispatch: list[osm.OsmStage]
+) -> None:
     result = runner.invoke(app, ["--no-log-file", "setup", "--import-osm-data"])
     assert result.exit_code == 0, result.output
-
-    script = osm_leaf_script.resolve() / "setup/data-sources/osm/import-osm-data.sh"
-    [call] = recorded_run.calls
-    assert call["cmd"] == ["bash", str(script), "--all"]
+    assert osm_dispatch == [osm.OsmStage.all]
 
 
-def test_setup_cli_osm_arg_passthrough(osm_leaf_script: Path, recorded_run) -> None:
+def test_setup_cli_osm_stage_option(fake_repo: Path, osm_dispatch: list[osm.OsmStage]) -> None:
     result = runner.invoke(
         app,
-        ["--no-log-file", "setup", "--import-osm-data", "--osm-arg=--import"],
+        ["--no-log-file", "setup", "--import-osm-data", "--osm-stage", "import"],
     )
     assert result.exit_code == 0, result.output
-
-    script = osm_leaf_script.resolve() / "setup/data-sources/osm/import-osm-data.sh"
-    [call] = recorded_run.calls
-    assert call["cmd"] == ["bash", str(script), "--import"]
+    assert osm_dispatch == [osm.OsmStage.import_]
 
 
 # ---------------------------------------------------------------------------

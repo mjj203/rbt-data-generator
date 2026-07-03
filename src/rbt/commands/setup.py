@@ -5,6 +5,7 @@ from __future__ import annotations
 import typer
 
 from .. import setup_db
+from ..importers.osm import OsmStage
 from ..layers import load_registry
 from ._common import settings_from_ctx
 
@@ -21,11 +22,10 @@ def setup_entry(
     import_geonames: bool = typer.Option(False, "--import-geonames"),
     import_buildings: bool = typer.Option(False, "--import-buildings"),
     process_schemas: bool = typer.Option(False, "--process-schemas"),
-    osm_arg: list[str] = typer.Option(
-        None,
-        "--osm-arg",
-        help="Stage flag passed through to the OSM import script "
-        "(repeatable, use the = form: --osm-arg=--import). Defaults to --all.",
+    osm_stage: OsmStage = typer.Option(
+        OsmStage.all,
+        "--osm-stage",
+        help="OSM import stage to run within setup (default: the full workflow).",
     ),
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
@@ -64,7 +64,7 @@ def setup_entry(
         settings_from_ctx(ctx),
         load_registry(),
         steps,
-        osm_args=list(osm_arg or []),
+        osm_stage=osm_stage,
         dry_run=dry_run,
     )
 
