@@ -242,8 +242,11 @@ jobs:
           command -v psql
           psql "host=localhost port=5432 dbname=rbt user=rbt_user password=rbt_password" -c 'SELECT version()'
       - name: Dry-run validation (deprecated bash path)
+        # bash -x: this step has failed with no diagnostics on every run (the
+        # script exits 1 right after its config summary and the runner drops
+        # its final stderr); xtrace pinpoints the dying statement.
         run: |
-          ./production/generate-tiles.sh --layer-type physical --projection 3857 --water --dry-run
+          bash -x ./production/generate-tiles.sh --layer-type physical --projection 3857 --water --dry-run
           ./production/generate-tiles.sh --layer-type cultural --projection 4326 --building --dry-run
 
   integration-tiles:

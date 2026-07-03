@@ -232,7 +232,8 @@ jobs:
       - name: Probe NGA GNS (smallest feature-class zip)
         run: |
           set -euxo pipefail
-          curl -fsSL -o "$RUNNER_TEMP/Undersea.zip" \
+          curl -fsSL --connect-timeout 30 --retry 3 --retry-all-errors -m 180 \
+            -o "$RUNNER_TEMP/Undersea.zip" \
             "https://geonames.nga.mil/geonames/GNSData/fc_files/Undersea.zip"
           test "$(stat -c%s "$RUNNER_TEMP/Undersea.zip")" -gt 10000
           # Columns the geonames importer maps to geometry must be present.
