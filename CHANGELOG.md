@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-07-03
 
 ### Added
 - Native Python data importers (`src/rbt/importers/`) replacing the four bash
@@ -65,6 +65,16 @@ All notable changes to this project are documented in this file. The format is b
 - `OSM_SRID` now defaults to `4326` (was `3857`): the `rbt.*` schema SQL
   casts imposm-imported geometry to `::geometry(..., 4326)`, so importing in
   3857 made every schema unit fail with an SRID mismatch.
+- `rbt.conf` parsing now expands nested `${VAR:-${OTHER:-default}}`
+  expressions correctly. The previous first-`}` regex truncated the outer
+  default at the first inner brace, corrupting bash-idiomatic templates like
+  the default `OSM_CONNECTION` (which nests four `${DATABASE_*}`
+  references) into an unparseable URL.
+- A stray `====` line in `water-features.sql` (missing its `--` comment
+  prefix) and a real trailing comma left in the two EPSG:4326 tile
+  generators' emitted `metadata.json` (both invisible to the bash-era
+  dispatch, which never ran `psql` with `ON_ERROR_STOP` or validated its own
+  JSON) — found and fixed while bringing up the nightly integration test.
 
 ### Removed
 - The four bash leaf importers
@@ -172,5 +182,6 @@ suite, a full documentation site, and open-source hygiene files.
 - `docker-compose.yml` no longer mounts nonexistent files — templates are shipped under `config/`.
 - README and compose now agree on PostgreSQL version.
 
-[Unreleased]: https://github.com/MJJ203/rbt-data-generator/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/MJJ203/rbt-data-generator/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/MJJ203/rbt-data-generator/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/MJJ203/rbt-data-generator/releases/tag/v0.1.0
