@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rbt-data-generator.envConfigMapName" . }}
+  labels:
+    {{- include "rbt-data-generator.labels" . | nindent 4 }}
+data:
+  # Mirror of the compose x-rbt-env anchor (minus the password, which lives in
+  # the Secret). Both variable spellings are provided since the CLI and the leaf
+  # importers disagree on names.
+  PG_HOST: {{ include "rbt-data-generator.postgresHost" . | quote }}
+  PG_PORT: {{ include "rbt-data-generator.postgresPort" . | quote }}
+  PG_DATABASE: {{ .Values.config.pgDatabase | quote }}
+  PG_USR: {{ .Values.config.pgUser | quote }}
+  DATABASE_HOST: {{ include "rbt-data-generator.postgresHost" . | quote }}
+  DATABASE_PORT: {{ include "rbt-data-generator.postgresPort" . | quote }}
+  DATABASE_NAME: {{ .Values.config.pgDatabase | quote }}
+  DATABASE_USER: {{ .Values.config.pgUser | quote }}
+  MAX_PARALLEL_JOBS: {{ .Values.config.maxParallelJobs | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}

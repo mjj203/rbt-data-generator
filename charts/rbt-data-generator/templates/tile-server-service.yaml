@@ -1,0 +1,18 @@
+{{- if .Values.tileServer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rbt-data-generator.fullname" . }}-tile-server
+  labels:
+    {{- include "rbt-data-generator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tile-server
+spec:
+  type: {{ .Values.tileServer.service.type }}
+  selector:
+    {{- include "rbt-data-generator.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: tile-server
+  ports:
+    - name: http
+      port: {{ .Values.tileServer.service.port }}
+      targetPort: http
+{{- end }}

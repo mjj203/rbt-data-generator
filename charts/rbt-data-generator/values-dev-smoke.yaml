@@ -1,0 +1,54 @@
+# Dev / smoke profile.
+#
+# Small footprint for a regional extract and fast end-to-end validation. Runs
+# the one-time setup and the smoke check; public exposure and monitoring stay
+# off. Note the shared output volume still needs a ReadWriteMany StorageClass;
+# override output.persistence.accessModes if only RWO is available and colocate
+# workloads on one node.
+
+image:
+  tag: latest
+
+config:
+  maxParallelJobs: 2
+  logLevel: DEBUG
+
+postgres:
+  persistence:
+    size: 20Gi
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+
+output:
+  persistence:
+    size: 20Gi
+
+cache:
+  osm:
+    size: 5Gi
+  setup:
+    size: 10Gi
+
+setup:
+  enabled: true
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+
+smoke:
+  enabled: true
+
+production:
+  osmUpdates:
+    enabled: false
+  tiles:
+    enabled: false
+
+tileServer:
+  enabled: false
+
+prometheus:
+  enabled: false

@@ -1,0 +1,58 @@
+RBT Vector Tiles has been deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Enabled components:
+{{- if .Values.postgres.enabled }}
+  - PostGIS (in-chart StatefulSet)
+{{- else }}
+  - PostgreSQL: external at {{ .Values.postgres.external.host }}:{{ .Values.postgres.external.port }}
+{{- end }}
+{{- if .Values.setup.enabled }}
+  - Setup Job (rbt setup --all)
+{{- end }}
+{{- if .Values.production.osmUpdates.enabled }}
+  - OSM updates Deployment (rbt osm run)
+{{- end }}
+{{- if .Values.production.tiles.enabled }}
+  - Tiles Job (rbt tiles --all)
+{{- end }}
+{{- if .Values.smoke.enabled }}
+  - Smoke Job (rbt smoke)
+{{- end }}
+{{- if .Values.tileServer.enabled }}
+  - TileServer-GL
+{{- end }}
+{{- if .Values.prometheus.enabled }}
+  - Prometheus
+{{- end }}
+
+Useful commands:
+
+  # Watch pods
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} -w
+
+{{- if .Values.setup.enabled }}
+
+  # Follow the one-time setup job
+  kubectl logs -n {{ .Release.Namespace }} -f job/{{ include "rbt-data-generator.fullname" . }}-setup
+{{- end }}
+{{- if .Values.tileServer.enabled }}
+
+  # Reach TileServer-GL locally
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "rbt-data-generator.fullname" . }}-tile-server {{ .Values.tileServer.service.port }}:{{ .Values.tileServer.service.port }}
+  # then open http://localhost:{{ .Values.tileServer.service.port }}
+{{- end }}
+{{- if .Values.prometheus.enabled }}
+
+  # Reach Prometheus locally
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "rbt-data-generator.fullname" . }}-prometheus {{ .Values.prometheus.service.port }}:{{ .Values.prometheus.service.port }}
+{{- end }}
+
+{{- if .Values.output.persistence.enabled }}
+{{- if not (has "ReadWriteMany" .Values.output.persistence.accessModes) }}
+
+WARNING: the shared output volume is not ReadWriteMany. Multiple workloads
+(setup, osm-updates, tiles, smoke, tile-server) mount it simultaneously and will
+fail to schedule together unless they land on the same node. Set
+output.persistence.accessModes to include ReadWriteMany with an RWX StorageClass.
+{{- end }}
+{{- end }}

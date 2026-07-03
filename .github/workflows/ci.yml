@@ -134,6 +134,30 @@ jobs:
             config/layers.yml config/prometheus.yml docker-compose.yml \
             .github/workflows
 
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+      - name: helm lint
+        run: helm lint charts/rbt-data-generator
+      - name: helm template (default values)
+        run: helm template rbt charts/rbt-data-generator
+      - name: helm template (production values)
+        run: |
+          helm template rbt charts/rbt-data-generator \
+            -f charts/rbt-data-generator/values-production.yaml
+      - name: helm template (dev/smoke values)
+        run: |
+          helm template rbt charts/rbt-data-generator \
+            -f charts/rbt-data-generator/values-dev-smoke.yaml
+      - name: helm template (external database)
+        run: |
+          helm template rbt charts/rbt-data-generator \
+            --set postgres.enabled=false \
+            --set postgres.external.host=db.example.com
+
   python:
     runs-on: ubuntu-latest
     steps:

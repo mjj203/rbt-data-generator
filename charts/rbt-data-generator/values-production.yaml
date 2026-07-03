@@ -1,0 +1,69 @@
+# Production profile.
+#
+# Continuous OSM updates + tile generation, larger storage/resources, and the
+# tile server enabled. Set real credentials via --set auth.password=... or
+# auth.existingSecret, and size storage for your extract (a full planet needs
+# multi-TB volumes and server-class nodes).
+
+image:
+  tag: latest
+
+config:
+  maxParallelJobs: 8
+  logLevel: INFO
+
+# The image ships an x86-64 imposm3 binary; pin workloads to amd64 nodes.
+postgres:
+  persistence:
+    size: 2Ti
+  resources:
+    requests:
+      cpu: "4"
+      memory: 16Gi
+    limits:
+      memory: 32Gi
+  nodeSelector:
+    kubernetes.io/arch: amd64
+
+output:
+  persistence:
+    size: 4Ti
+
+cache:
+  osm:
+    size: 100Gi
+  setup:
+    size: 200Gi
+
+setup:
+  enabled: true
+  nodeSelector:
+    kubernetes.io/arch: amd64
+  resources:
+    requests:
+      cpu: "4"
+      memory: 16Gi
+
+production:
+  osmUpdates:
+    enabled: true
+    nodeSelector:
+      kubernetes.io/arch: amd64
+    resources:
+      requests:
+        cpu: "2"
+        memory: 8Gi
+  tiles:
+    enabled: true
+    nodeSelector:
+      kubernetes.io/arch: amd64
+    resources:
+      requests:
+        cpu: "4"
+        memory: 16Gi
+
+tileServer:
+  enabled: true
+
+prometheus:
+  enabled: true

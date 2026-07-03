@@ -1,0 +1,22 @@
+apiVersion: v2
+name: rbt-data-generator
+description: >-
+  RBT Vector Tiles - PostGIS plus the rbt setup/tiles/smoke jobs, the OSM update
+  daemon, and optional TileServer-GL and Prometheus. A Kubernetes translation of
+  the project's docker-compose profiles.
+type: application
+# Chart version tracks packaging changes; appVersion tracks the rbt release.
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://mjj203.github.io/rbt-data-generator/
+sources:
+  - https://github.com/MJJ203/rbt-data-generator
+keywords:
+  - vector-tiles
+  - postgis
+  - openstreetmap
+  - tippecanoe
+  - mvt
+maintainers:
+  - name: MJJ203
+    url: https://github.com/MJJ203

@@ -1,0 +1,21 @@
+{
+  "options": {
+    "paths": {
+      "root": "/data",
+      "mbtiles": "/data"
+    },
+    "formatQuality": {
+      "jpeg": 80,
+      "webp": 90
+    }
+  },
+  "styles": {},
+  "data": {
+    "physical-3857": {
+      "mbtiles": "physical/3857/physical_3857.mbtiles"
+    },
+    "cultural-3857": {
+      "mbtiles": "cultural/3857/cultural_3857.mbtiles"
+    }
+  }
+}

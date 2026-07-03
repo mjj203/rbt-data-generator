@@ -1,0 +1,19 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rbt-data-generator.postgresServiceName" . }}
+  labels:
+    {{- include "rbt-data-generator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  # Headless: governs the StatefulSet and resolves to the pod IP for clients.
+  clusterIP: None
+  selector:
+    {{- include "rbt-data-generator.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+  ports:
+    - name: postgres
+      port: {{ .Values.postgres.service.port }}
+      targetPort: postgres
+{{- end }}

@@ -1,0 +1,65 @@
+{{- if .Values.tileServer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rbt-data-generator.fullname" . }}-tile-server
+  labels:
+    {{- include "rbt-data-generator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tile-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "rbt-data-generator.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: tile-server
+  template:
+    metadata:
+      labels:
+        {{- include "rbt-data-generator.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: tile-server
+    spec:
+      {{- include "rbt-data-generator.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "rbt-data-generator.serviceAccountName" . }}
+      {{- with .Values.tileServer.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: tile-server
+          image: "{{ .Values.tileServer.image.registry }}/{{ .Values.tileServer.image.repository }}:{{ .Values.tileServer.image.tag }}"
+          imagePullPolicy: {{ .Values.tileServer.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: output
+              mountPath: /data
+              subPath: tiles
+            - name: config
+              mountPath: /data/config.json
+              subPath: config.json
+              readOnly: true
+          {{- with .Values.tileServer.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: output
+          persistentVolumeClaim:
+            claimName: {{ include "rbt-data-generator.outputClaimName" . }}
+        - name: config
+          configMap:
+            name: {{ include "rbt-data-generator.fullname" . }}-tileserver
+      {{- with .Values.tileServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tileServer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tileServer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

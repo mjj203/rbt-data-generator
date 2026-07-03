@@ -1,0 +1,11 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rbt-data-generator.fullname" . }}-postgresql
+  labels:
+    {{- include "rbt-data-generator.labels" . | nindent 4 }}
+data:
+  postgresql.conf: |
+{{ .Files.Get "files/postgresql.conf" | indent 4 }}
+{{- end }}

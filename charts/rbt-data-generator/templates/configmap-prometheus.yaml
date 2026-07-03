@@ -1,0 +1,25 @@
+{{- if .Values.prometheus.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rbt-data-generator.fullname" . }}-prometheus
+  labels:
+    {{- include "rbt-data-generator.labels" . | nindent 4 }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # Only the long-running osm-updates Deployment is a stable scrape target;
+      # tiles runs as a one-shot Job, so it is intentionally omitted here.
+      - job_name: rbt-osm-updates
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["{{ include "rbt-data-generator.fullname" . }}-osm-updates:{{ .Values.production.osmUpdates.metricsPort }}"]
+{{- end }}

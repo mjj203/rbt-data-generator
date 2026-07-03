@@ -1,0 +1,194 @@
+# Default values for rbt-data-generator.
+# Conservative defaults shared by all environments. Override with
+# values-production.yaml or values-dev-smoke.yaml for concrete deployments.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# The shared rbt image (built from Dockerfile.production, published to GHCR).
+image:
+  registry: ghcr.io
+  repository: mjj203/rbt-data-generator
+  # Defaults to .Chart.appVersion when empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Pod security context applied to the rbt workloads (setup, osm-updates, tiles,
+# smoke). The image runs as the non-root "rbt" user; fsGroup is added as a
+# supplemental group and the RWX output/cache volumes are made group-writable so
+# that user can write regardless of its (build-assigned) uid/gid.
+podSecurityContext:
+  fsGroup: 1000
+
+# Per-container security context for the rbt workloads.
+securityContext: {}
+
+# Non-secret shared environment (the compose x-rbt-env anchor). Injected into
+# every rbt workload via envFrom.
+config:
+  pgDatabase: rbt
+  pgUser: rbt_user
+  maxParallelJobs: 4
+  logLevel: INFO
+
+# Database credentials, stored in a Secret.
+auth:
+  # Password used when existingSecret is empty.
+  password: rbt_password
+  # Provide an existing Secret instead of letting the chart create one.
+  existingSecret: ""
+  passwordKey: PG_PASS
+
+# In-chart PostGIS (StatefulSet). Disable to use an external database.
+postgres:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: postgis/postgis
+    tag: "18-3.6"
+    pullPolicy: IfNotPresent
+  # Used when postgres.enabled is false: the chart wires workloads to this host
+  # instead of the in-chart Service.
+  external:
+    host: ""
+    port: 5432
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    storageClassName: ""
+    accessMode: ReadWriteOnce
+    size: 50Gi
+    existingClaim: ""
+  # postgis image runs its entrypoint as root and fixes PGDATA permissions
+  # itself, so no fsGroup here (an fsGroup would make PGDATA group-writable,
+  # which postgres rejects).
+  podSecurityContext: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Shared output volume (generated tiles + logs), the compose ./output bind
+# mount. Must be ReadWriteMany so setup, osm-updates, tiles, smoke, and the tile
+# server can all mount it.
+output:
+  persistence:
+    enabled: true
+    storageClassName: ""
+    accessModes:
+      - ReadWriteMany
+    size: 100Gi
+    existingClaim: ""
+
+# Per-workload caches (compose setup_cache / osm_cache named volumes). The osm
+# cache persists imposm diff state across restarts.
+cache:
+  setup:
+    enabled: true
+    storageClassName: ""
+    accessMode: ReadWriteOnce
+    size: 20Gi
+    existingClaim: ""
+  osm:
+    enabled: true
+    storageClassName: ""
+    accessMode: ReadWriteOnce
+    size: 20Gi
+    existingClaim: ""
+
+# One-shot database initialization (compose profile: setup).
+setup:
+  enabled: false
+  backoffLimit: 1
+  # 0 leaves activeDeadlineSeconds unset.
+  activeDeadlineSeconds: 0
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Continuous operations (compose profile: production).
+production:
+  # Long-running OSM update daemon (rbt osm run).
+  osmUpdates:
+    enabled: false
+    # imposm's supervisor needs ~30s after SIGTERM (compose stop_grace_period).
+    terminationGracePeriodSeconds: 35
+    metricsPort: 8080
+    resources: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+  # Batch tile generation (rbt tiles --all). A Job, not a Deployment, so it does
+  # not restart-loop after completing.
+  tiles:
+    enabled: false
+    backoffLimit: 1
+    tileCacheDir: /app/output/tiles
+    resources: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+# Fast end-to-end sanity check (compose profile: smoke).
+smoke:
+  enabled: false
+  backoffLimit: 1
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Optional TileServer-GL in front of the generated tiles (compose profile: serve).
+tileServer:
+  enabled: false
+  image:
+    registry: docker.io
+    repository: maptiler/tileserver-gl
+    tag: "v5.6.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+  podSecurityContext:
+    fsGroup: 1000
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Optional Prometheus exporter (compose profile: monitoring).
+# NOTE: scrape targets reference /metrics endpoints that may not exist yet; only
+# the osm-updates Deployment is a stable target (tiles is a one-shot Job).
+prometheus:
+  enabled: false
+  image:
+    registry: docker.io
+    repository: prom/prometheus
+    tag: "v3.12.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9090
+  persistence:
+    enabled: true
+    storageClassName: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+    existingClaim: ""
+  # Prometheus image runs as nobody (uid/gid 65534); fsGroup makes its data
+  # volume writable.
+  podSecurityContext:
+    fsGroup: 65534
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}

@@ -1,0 +1,17 @@
+{{- if and .Values.output.persistence.enabled (not .Values.output.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "rbt-data-generator.fullname" . }}-output
+  labels:
+    {{- include "rbt-data-generator.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.output.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.output.persistence.size | quote }}
+  {{- if .Values.output.persistence.storageClassName }}
+  storageClassName: {{ .Values.output.persistence.storageClassName | quote }}
+  {{- end }}
+{{- end }}

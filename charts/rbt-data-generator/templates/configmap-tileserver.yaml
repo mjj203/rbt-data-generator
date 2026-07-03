@@ -1,0 +1,11 @@
+{{- if .Values.tileServer.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rbt-data-generator.fullname" . }}-tileserver
+  labels:
+    {{- include "rbt-data-generator.labels" . | nindent 4 }}
+data:
+  config.json: |
+{{ .Files.Get "files/tile-server.json" | indent 4 }}
+{{- end }}
