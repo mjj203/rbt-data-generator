@@ -2,7 +2,7 @@
 
 Wraps :mod:`logging` with :class:`rich.logging.RichHandler` so that:
 
-- TTYs get colored output matching ``scripts/lib/logging.sh``.
+- TTYs get colored, level-tagged output.
 - Non-TTYs (CI, Docker logs, files) emit plain timestamps.
 - Each invocation can optionally duplicate to a log file.
 """

@@ -1,9 +1,10 @@
 """Importers for OSM, reference, GeoNames, and Overture datasets.
 
-Current implementation shells out to the existing Bash scripts, which
-remain the source of truth for the complex parallel-download orchestration.
-The Python wrapper adds structured logging, typed error handling, and CLI
-ergonomics; rewriting the download loops in pure Python is a future step.
+Each importer is native Python: declarative dataset registries, stdlib
+downloads with atomic renames, and thread-pooled ingest jobs. External
+geospatial binaries (ogr2ogr, imposm, aria2c, aws, osmium, osmosis) are
+invoked as subprocesses via :mod:`rbt.process`; shared plumbing lives in
+:mod:`rbt.importers._support`.
 """
 
 from . import buildings, geonames, osm, reference

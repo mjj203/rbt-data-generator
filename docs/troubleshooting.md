@@ -37,8 +37,8 @@ All `rbt` commands that mutate state duplicate their logs to
 - `rbt_<timestamp>.log` — per-invocation CLI log (override with the global
   `--log-file` option, disable with `--no-log-file`).
 - `schema_<key>_<timestamp>.log` — `psql` output for each `rbt schema run` unit.
-- `osm_import.log` — the OSM importer leaf script (`OSM_LOG_FILE` in
-  `config/rbt.conf`).
+- `<importer>_<job>_<timestamp>.log` — one file per importer download/ingest
+  job (e.g. `geonames_geonames_fr_<timestamp>.log`).
 - Per-layer tile logs live next to the tiles:
   `output/tiles/<layer_type>/<projection>/<layer>_<projection>.log`, plus
   `merge_<projection>.log` for tile-join and `<layer_type>_4326_mvt.log`
@@ -73,11 +73,10 @@ rbt setup --import-buildings
 # Debug-level CLI logging
 rbt --debug setup --import-reference-data
 
-# The importer leaf scripts honor SCRIPT_* variables from config/rbt.conf;
-# override per run to preserve temp files for inspection. Note: the OSM
-# importer is the one exception — it honors OSM_CLEANUP_ON_EXIT, not
-# SCRIPT_CLEAN_TEMP_FILES (which the buildings/geonames/reference importers use).
-OSM_CLEANUP_ON_EXIT=false SCRIPT_DEBUG=true rbt import osm -- --all
+# Preserve temp files for inspection. The OSM importer honors
+# OSM_CLEANUP_ON_EXIT; the buildings/geonames/reference importers use
+# CLEAN_TEMP_FILES (both in config/rbt.conf).
+OSM_CLEANUP_ON_EXIT=false rbt --debug import osm --stage all
 ```
 
 ## Tile generation issues
@@ -161,8 +160,9 @@ pidfile points at a dead process it is cleaned up automatically.
 ## Insufficient resources
 
 - Check disk space (`df -h`) and memory (`free -g` / `sysctl hw.memsize`) — `rbt validate` checks both against `DISK_SPACE_REQUIRED_GB`/`MEMORY_REQUIRED_GB`.
-- `MAX_PARALLEL_JOBS` is reported by `rbt validate` but is not yet wired to any real parallelism in the Python CLI — lowering it has no effect today (see [Configuration](configuration.md)).
-- Set `SCRIPT_PARALLEL_INGESTION=false` to reduce peak memory during setup.
+- Lower `MAX_PARALLEL_JOBS` to shrink the importers' download/ingest thread
+  pools (see [Configuration](configuration.md)).
+- Avoid `rbt import reference --parallel` to reduce peak memory during setup.
 
 ## Configuration inspection
 

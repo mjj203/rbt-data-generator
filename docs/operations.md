@@ -148,7 +148,7 @@ to the `import.*` tables.
 | `rbt osm run` | Starts the supervisor in the foreground (blocks). Refuses to start if a live pidfile already exists. |
 | `rbt osm status` | Exit `0` if running, `1` if not; also reports the last applied change from the `imposm3_log` table. |
 | `rbt osm stop` | Sends `SIGTERM` via the pidfile, waits up to 30 s, then escalates to `SIGKILL`. |
-| `rbt osm import` | One-shot planet download + initial import (delegates to the bash leaf script). |
+| `rbt osm import` | One-shot planet download + initial import (alias of `rbt import osm`; see the [`--stage` table](osm-import.md)). |
 
 Lifecycle details:
 
@@ -291,7 +291,7 @@ into every container):
 |---|---|
 | `output/logs/rbt_<timestamp>.log` | Default per-invocation log for mutating `rbt` commands (`--log-file` overrides, `--no-log-file` disables). |
 | `output/logs/schema_<key>_<timestamp>.log` | `psql` output of each `rbt schema run` unit. |
-| `output/logs/osm_import.log` | Planet import leaf script (`OSM_LOG_FILE`). |
+| `output/logs/<importer>_<job>_<timestamp>.log` | Per-job importer logs (one file per download/ingest job). |
 | `output/tiles/<type>/<proj>/*.log` | Per-layer export/tippecanoe logs, `merge_<proj>.log`, `<type>_4326_mvt.log`. |
 | `docker compose logs postgres` (stderr) | PostgreSQL server logs. `config/postgresql.conf` intentionally leaves `logging_collector` off (no writable `log_directory` is provisioned), so logs go to stderr and are captured by the container's log driver rather than rotated files under `/var/log/postgresql/`. |
 

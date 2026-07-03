@@ -5,9 +5,10 @@ building data directly to FlatGeobuf format, without requiring PostgreSQL
 ingestion. It is unrelated to `rbt import buildings` (the PostgreSQL-based
 importer used by `rbt setup` — see [Database Initialization](database-initialization.md)),
 though both are pinned to the same Overture release (`2026-06-17.0`, set in
-`tools/duckdb-building-export.sql` and `import-buildings.sh`) — see the
+`tools/duckdb-building-export.sql` and, for the importer, `OVERTURE_RELEASE`
+in `config/rbt.conf` or `rbt import buildings --release`) — see the
 [Data Sources & Licensing](data-sources.md#overture-maps-buildings) page for
-why that pin must move in lockstep across both scripts. Pick one path per
+why that pin must move in lockstep across both paths. Pick one path per
 pipeline; they are not meant to be combined.
 
 ## Overview

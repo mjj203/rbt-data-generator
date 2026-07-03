@@ -6,7 +6,8 @@ numbers, they should agree with the tables here.
 
 !!! note "Most numbers on this page are estimates"
     The planet-scale durations were measured on the *recommended* tier below
-    with `SCRIPT_PARALLEL_INGESTION=true`; everything else scales with disk
+    with parallel reference ingestion (now `rbt import reference --parallel`);
+    everything else scales with disk
     speed, network bandwidth, and how busy PostgreSQL is. Treat ranges as
     honest expectations, not guarantees.
 
@@ -35,7 +36,8 @@ Assumptions behind the table:
 
 ### Full planet (one-time initialization)
 
-Measured on the recommended tier with `SCRIPT_PARALLEL_INGESTION=true`:
+Measured on the recommended tier with parallel reference ingestion
+(now `rbt import reference --parallel`):
 
 | Step | Duration |
 |---|---|
@@ -134,9 +136,8 @@ tile directory.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `MAX_PARALLEL_JOBS` | 4 | General parallelism setting surfaced through `Settings` (reported by `rbt validate`). Conservative by default; raise toward core count minus 2 on a dedicated host. |
-| `SCRIPT_MAX_PARALLEL_JOBS` | 4 | Job-pool size inside the bash importers (parallel downloads/ingests in `import-reference-data.sh` and `import-geonames.sh`). |
-| `SCRIPT_PARALLEL_INGESTION` | `false` | Full fan-out ingestion in the reference importer: roughly halves wall time, roughly doubles peak memory and DB connection pressure. |
+| `MAX_PARALLEL_JOBS` | 4 | Thread-pool size for the importers' download/ingest jobs (`rbt import geonames`/`reference`), also reported by `rbt validate`. Conservative by default; raise toward core count minus 2 on a dedicated host. |
+| `rbt import reference --parallel` (flag) | off | Full fan-out ingestion in the reference importer (collapses the phased pools): roughly halves wall time, roughly doubles peak memory and DB connection pressure. |
 | `ARIA2C_MAX_DOWNLOADS` / `ARIA2C_MAX_CONNECTIONS` / `ARIA2C_SPLITS` | 12 / 16 / 9 | Planet download parallelism — usually network-limited, rarely worth raising. |
 
 ## Built-in performance features
