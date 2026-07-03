@@ -71,9 +71,9 @@ PHYSICAL_CATEGORY_FLAGS: tuple[str, ...] = (
 class TileRequest:
     """Normalized ``rbt tiles`` invocation, independent of Typer.
 
-    Built once by :func:`_build_tile_request` from the raw CLI options; both
-    :func:`_dispatch_native` and :func:`_dispatch_bash` read only from this
-    object, never from the original Typer parameters.
+    Built once by :func:`_build_tile_request` from the raw CLI options; the
+    dispatcher (:func:`_dispatch_native`) reads only from this object, never
+    from the original Typer parameters.
     """
 
     layer_type: LayerType

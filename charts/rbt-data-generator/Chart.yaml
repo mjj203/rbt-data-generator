@@ -6,7 +6,7 @@ description: >-
   the project's docker-compose profiles.
 type: application
 # Chart version tracks packaging changes; appVersion tracks the rbt release.
-version: 0.1.0
+version: 0.2.0
 appVersion: "0.2.0"
 home: https://mjj203.github.io/rbt-data-generator/
 sources:

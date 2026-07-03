@@ -55,7 +55,7 @@ RBT Vector Tiles is an open-source pipeline that turns authoritative geospatial 
 ## Project status
 
 !!! warning "Pre-1.0 software"
-    RBT Vector Tiles is alpha software (0.1.0 released) after a large refactor from bash orchestration to the Python `rbt` CLI. The CLI is the only entry point: the legacy bash tile generators were removed after output parity was verified (see the [parity runbook](parity-runbook.md) completion note). Expect command flags and configuration keys to change before 1.0. Bug reports and pull requests are welcome — see [Contributing](contributing.md) and [Security](security.md).
+    RBT Vector Tiles is alpha software (0.2.0 released) after a large refactor from bash orchestration to the Python `rbt` CLI. The CLI is the only entry point: the legacy bash tile generators were removed after output parity was verified (see the [parity runbook](parity-runbook.md) completion note). Expect command flags and configuration keys to change before 1.0. Bug reports and pull requests are welcome — see [Contributing](contributing.md) and [Security](security.md).
 
 ## Requirements at a glance
 

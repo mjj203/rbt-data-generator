@@ -25,7 +25,7 @@ Overture Maps, FieldMaps, OurAirports).
 - **Tested and linted**: pytest, ruff, mypy, shellcheck, sqlfluff, and hadolint
   gate every change in CI
 
-> **Status:** alpha (0.1.0 released) — the CLI surface is still stabilizing; expect command flags and configuration keys to change before 1.0.
+> **Status:** alpha (0.2.0 released) — the CLI surface is still stabilizing; expect command flags and configuration keys to change before 1.0.
 
 ## Quick start
 
