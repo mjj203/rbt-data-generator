@@ -1,8 +1,15 @@
 """OSM data import and continuous updates.
 
-- :func:`import_osm` delegates to the bash leaf script
-  ``setup/data-sources/osm/import-osm-data.sh`` (planet download + imposm
-  import — see the contract header in that script).
+- The native import stages (:func:`download_planet`, :func:`download_diffs`,
+  :func:`merge_diffs`, :func:`apply_changes`, :func:`import_planet`,
+  :func:`import_diffs`) port ``setup/data-sources/osm/import-osm-data.sh``:
+  aria2c multi-mirror planet download → daily replication diffs → osmium
+  merge → osmosis apply → imposm import. :func:`run_import` sequences them by
+  :class:`OsmStage`; ``OsmStage.all`` deliberately stops after the initial
+  imposm import (continuous updates are ``rbt osm run``, not part of the
+  import). Intermediates (``osm.osc.gz``, ``planet.osm.pbf``) are removed
+  only after a *successful* full run — unlike the bash EXIT trap, which also
+  deleted them when a single stage was run in isolation.
 - :func:`run_updates` / :func:`update_status` / :func:`stop_updates` natively
   supervise ``imposm run`` (replacing ``production/update-osm.sh``). The
   supervisor often runs as container PID 1, so it forwards SIGTERM/SIGINT to
@@ -14,31 +21,429 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import signal
 import subprocess
 import time
+from collections.abc import Callable
+from enum import Enum
 from pathlib import Path
 from types import FrameType
 
 import psycopg
 
-from ..bash import delegate
+from .. import process
 from ..config import Settings
 from ..logging import get_logger
 from ..process import CommandFailed
+from . import _support
 
 log = get_logger(__name__)
 
 _TERMINATE_GRACE_SECONDS = 30.0
 
+# ---------------------------------------------------------------------------
+# Import pipeline constants (ported verbatim from import-osm-data.sh)
+# ---------------------------------------------------------------------------
 
-def import_osm(settings: Settings, args: list[str], *, dry_run: bool = False) -> None:
-    delegate(
-        "setup/data-sources/osm/import-osm-data.sh",
-        args,
-        settings,
+_PLANET_FILENAME = "planet-latest-v2.osm.pbf"
+_MERGED_CHANGES_FILENAME = "osm.osc.gz"
+_UPDATED_PLANET_FILENAME = "planet.osm.pbf"
+
+_USER_AGENT = "OpenMapTiles download-osm 7.1.1 (https://github.com/openmaptiles/openmaptiles-tools)"
+
+#: Planet PBF mirrors, in the bash script's order; aria2c races segments
+#: across all of them.
+PLANET_MIRRORS: tuple[str, ...] = (
+    "https://ftp.spline.de/pub/openstreetmap/pbf/planet-latest.osm.pbf",
+    "https://ftp5.gwdg.de/pub/misc/openstreetmap/planet.openstreetmap.org/pbf/planet-latest.osm.pbf",
+    "https://ftp.fau.de/osm-planet/pbf/planet-latest.osm.pbf",
+    "https://ftpmirror.your.org/pub/openstreetmap/pbf/planet-latest.osm.pbf",
+    "https://download.bbbike.org/osm/planet/planet-latest.osm.pbf",
+    "https://ftp.nluug.nl/maps/planet.openstreetmap.org/pbf/planet-latest.osm.pbf",
+    "https://ftp.osuosl.org/pub/openstreetmap/pbf/planet-latest.osm.pbf",
+    "https://ftp.snt.utwente.nl/pub/misc/openstreetmap/planet-latest.osm.pbf",
+    "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf",
+)
+
+# Daily replication diffs live under a fixed 000/004/ prefix for the sequence
+# range this pipeline supports (seq -f "%03g" in the bash script).
+_DIFF_URL_TEMPLATE = "https://planet.openstreetmap.org/replication/day/000/004/{seq:03d}.osc.gz"
+_DIFF_MIN_BYTES = 1_048_576  # bash validated each diff at >= 1 MB
+_MERGED_MIN_MB = 10
+_APPLY_PLANET_MIN_MB = 50_000  # planet-sized floor used by apply-changes
+
+_NUMERIC_OSC_RE = re.compile(r"^(\d+)\.osc\.gz$")
+
+
+class OsmStage(str, Enum):
+    """OSM import pipeline stages (values mirror the bash script's flags)."""
+
+    all = "all"
+    download_planet = "download-planet"
+    download_diffs = "download-diffs"
+    merge_diffs = "merge-diffs"
+    apply_changes = "apply-changes"
+    import_ = "import"
+    import_diff = "import-diff"
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+
+def _resolve_path(settings: Settings, path: Path) -> Path:
+    return path if path.is_absolute() else settings.project_root / path
+
+
+def _require_file(path: Path, min_mb: int) -> None:
+    if not _support.validate_min_size(path, min_mb):
+        raise FileNotFoundError(f"{path} is missing or smaller than {min_mb}MB")
+
+
+def _numeric_diff_files(settings: Settings) -> list[Path]:
+    """Numerically sorted ``NNN.osc.gz`` files in the data dir.
+
+    Excludes the merged ``osm.osc.gz`` on purpose, and sorts numerically so
+    sequence 1000 follows 999 (the bash glob sorted lexically and broke
+    past three digits).
+    """
+    matched: list[tuple[int, Path]] = []
+    for path in settings.osm_data_dir.glob("*.osc.gz"):
+        match = _NUMERIC_OSC_RE.match(path.name)
+        if match:
+            matched.append((int(match.group(1)), path))
+    return [path for _, path in sorted(matched)]
+
+
+# ---------------------------------------------------------------------------
+# Stage 1: planet download
+# ---------------------------------------------------------------------------
+
+
+def download_planet(settings: Settings, *, dry_run: bool = False) -> None:
+    """Download the planet PBF via aria2c racing all mirrors."""
+    planet = settings.osm_data_dir / _PLANET_FILENAME
+    if _support.validate_min_size(planet, settings.osm_min_pbf_size_mb):
+        log.info("planet file already exists and is valid — skipping download: %s", planet)
+        return
+
+    cmd = [
+        "aria2c",
+        "--file-allocation=falloc",
+        f"--max-concurrent-downloads={settings.aria2c_max_downloads}",
+        f"--max-connection-per-server={settings.aria2c_max_connections}",
+        f"--split={settings.aria2c_splits}",
+        "--http-accept-gzip=true",
+        f"--user-agent={_USER_AGENT}",
+        f"--dir={settings.osm_data_dir}",
+        f"--out={_PLANET_FILENAME}",
+        "--auto-file-renaming=false",
+        "--continue=true",
+        "--max-tries=3",
+        "--retry-wait=10",
+        "--timeout=300",
+        "--summary-interval=60",
+        *PLANET_MIRRORS,
+    ]
+    if not dry_run:
+        settings.osm_data_dir.mkdir(parents=True, exist_ok=True)
+    process.run_with_retry(
+        cmd,
+        retries=settings.retry_count,
+        delay=settings.retry_delay,
+        log_file=_support.job_log_file(settings, "osm", "download_planet"),
         dry_run=dry_run,
     )
+    if dry_run:
+        return
+    if settings.osm_validate_downloads and not _support.validate_min_size(
+        planet, settings.osm_min_pbf_size_mb
+    ):
+        raise _support.ImportFailed([f"planet download validation: {planet}"])
+
+
+# ---------------------------------------------------------------------------
+# Stage 2: replication diffs
+# ---------------------------------------------------------------------------
+
+
+def _download_diff_job(url: str, dest: Path, *, dry_run: bool) -> Callable[[], None]:
+    def action() -> None:
+        # Existing files >= 1 MB are skipped inside download() (resume
+        # semantics, matching the bash validate_file <file> 1 short-circuit).
+        _support.download(url, dest, min_bytes=_DIFF_MIN_BYTES, dry_run=dry_run)
+
+    return action
+
+
+def download_diffs(
+    settings: Settings,
+    start_seq: int | None = None,
+    end_seq: int | None = None,
+    *,
+    dry_run: bool = False,
+) -> None:
+    """Download daily replication diffs for the given sequence range."""
+    start = int(settings.osm_diff_start_seq if start_seq is None else start_seq)
+    end = int(settings.osm_diff_end_seq if end_seq is None else end_seq)
+    if start < 0 or end < 0:
+        raise ValueError(f"diff sequence numbers must be non-negative (got {start}..{end})")
+    if start > end:
+        raise ValueError(f"START_SEQ ({start}) must be less than or equal to END_SEQ ({end})")
+
+    log.info("downloading OSM diff sequences %03d..%03d", start, end)
+    jobs = [
+        _support.Job(
+            name=f"{seq:03d}.osc.gz",
+            action=_download_diff_job(
+                _DIFF_URL_TEMPLATE.format(seq=seq),
+                settings.osm_data_dir / f"{seq:03d}.osc.gz",
+                dry_run=dry_run,
+            ),
+        )
+        for seq in range(start, end + 1)
+    ]
+    failed = _support.run_jobs(
+        jobs, settings, max_workers=settings.download_parallel_jobs, dry_run=dry_run
+    )
+    if failed:
+        raise _support.ImportFailed(failed)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3: merge diffs
+# ---------------------------------------------------------------------------
+
+
+def merge_diffs(settings: Settings, *, dry_run: bool = False) -> None:
+    """Merge the downloaded diffs into a single ``osm.osc.gz`` change file."""
+    diff_files = _numeric_diff_files(settings)
+    if not diff_files and not dry_run:
+        raise FileNotFoundError(f"no numeric .osc.gz diff files found in {settings.osm_data_dir}")
+
+    cmd = [
+        "osmium",
+        "merge-changes",
+        "-o",
+        _MERGED_CHANGES_FILENAME,
+        "-s",
+        *[path.name for path in diff_files],
+    ]
+    process.run_with_retry(
+        cmd,
+        retries=settings.retry_count,
+        delay=settings.retry_delay,
+        cwd=settings.osm_data_dir,
+        log_file=_support.job_log_file(settings, "osm", "merge_diffs"),
+        dry_run=dry_run,
+    )
+    if dry_run:
+        return
+    merged = settings.osm_data_dir / _MERGED_CHANGES_FILENAME
+    if settings.osm_validate_downloads and not _support.validate_min_size(merged, _MERGED_MIN_MB):
+        raise _support.ImportFailed([f"merged change file validation: {merged}"])
+
+
+# ---------------------------------------------------------------------------
+# Stage 4: apply changes
+# ---------------------------------------------------------------------------
+
+
+def apply_changes(settings: Settings, *, dry_run: bool = False) -> None:
+    """Apply the merged change file to the planet PBF via osmosis."""
+    data_dir = settings.osm_data_dir
+    if not dry_run:
+        _require_file(data_dir / _MERGED_CHANGES_FILENAME, _MERGED_MIN_MB)
+        _require_file(data_dir / _PLANET_FILENAME, _APPLY_PLANET_MIN_MB)
+
+    cmd = [
+        "osmosis",
+        "--read-xml-change",
+        f"file={_MERGED_CHANGES_FILENAME}",
+        "--read-pbf",
+        f"file={_PLANET_FILENAME}",
+        "--apply-change",
+        "--write-pbf",
+        f"file={_UPDATED_PLANET_FILENAME}",
+    ]
+    process.run_with_retry(
+        cmd,
+        retries=settings.retry_count,
+        delay=settings.retry_delay,
+        cwd=data_dir,
+        log_file=_support.job_log_file(settings, "osm", "apply_changes"),
+        dry_run=dry_run,
+    )
+    if dry_run:
+        return
+    updated = data_dir / _UPDATED_PLANET_FILENAME
+    if settings.osm_validate_downloads and not _support.validate_min_size(
+        updated, _APPLY_PLANET_MIN_MB
+    ):
+        raise _support.ImportFailed([f"updated planet file validation: {updated}"])
+
+
+# ---------------------------------------------------------------------------
+# Stage 5: imposm import
+# ---------------------------------------------------------------------------
+
+
+def import_planet(settings: Settings, *, dry_run: bool = False) -> None:
+    """Import the updated planet PBF into PostGIS with imposm."""
+    planet = settings.osm_data_dir / _UPDATED_PLANET_FILENAME
+    if not dry_run:
+        _require_file(planet, settings.osm_min_pbf_size_mb)
+
+    cmd = [
+        "imposm",
+        "import",
+        "-config",
+        str(_resolve_path(settings, settings.osm_config_file)),
+        "-mapping",
+        str(_resolve_path(settings, settings.osm_mapping_file)),
+        "-cachedir",
+        str(settings.osm_cache_dir),
+        "-diffdir",
+        str(settings.osm_diff_dir),
+        "-srid",
+        str(settings.osm_srid),
+        # imposm parses a postgis:// URL and does not read PGPASSWORD, so the
+        # password must travel in argv; process.run() redacts it from logs.
+        "-connection",
+        settings.imposm_connection(),
+        "-read",
+        str(planet),
+        "-write",
+        "-diff",
+        "-optimize",
+    ]
+    process.run_with_retry(
+        cmd,
+        retries=settings.retry_count,
+        delay=settings.retry_delay,
+        log_file=_support.job_log_file(settings, "osm", "import"),
+        dry_run=dry_run,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Stage 6: imposm diff (one-time changeset update)
+# ---------------------------------------------------------------------------
+
+
+def import_diffs(settings: Settings, *, dry_run: bool = False) -> None:
+    """Apply downloaded ``NNN.osc.gz`` changesets to the database via imposm diff."""
+    changesets: list[Path] = []
+    for path in _numeric_diff_files(settings):
+        if dry_run or _support.validate_min_size(path, 1):
+            changesets.append(path)
+        else:
+            log.warning("invalid changeset file: %s (skipping)", path)
+    if not changesets and not dry_run:
+        raise FileNotFoundError(f"no valid changeset files found in {settings.osm_data_dir}")
+
+    cmd = [
+        "imposm",
+        "diff",
+        "-config",
+        str(_resolve_path(settings, settings.osm_config_file)),
+        "-connection",
+        settings.imposm_connection(),
+        "-diffdir",
+        str(settings.osm_diff_dir),
+        "-srid",
+        str(settings.osm_srid),
+        "-mapping",
+        str(_resolve_path(settings, settings.osm_mapping_file)),
+        "-cachedir",
+        str(settings.osm_cache_dir),
+        *[str(path) for path in changesets],
+    ]
+    process.run_with_retry(
+        cmd,
+        retries=settings.retry_count,
+        delay=settings.retry_delay,
+        log_file=_support.job_log_file(settings, "osm", "import_diff"),
+        dry_run=dry_run,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Orchestration
+# ---------------------------------------------------------------------------
+
+
+def _cleanup_intermediates(settings: Settings, *, dry_run: bool) -> None:
+    """Remove the merged/updated intermediates after a successful full run.
+
+    Only ``run_import(all)`` cleans up (and only when the whole pipeline
+    succeeded); single-stage runs never delete their outputs. This fixes the
+    bash script's EXIT trap, which removed the intermediates even when a lone
+    ``--merge-diffs`` / ``--apply-changes`` invocation had just produced them.
+    """
+    if dry_run or not settings.osm_cleanup_on_exit:
+        return
+    for name in (_MERGED_CHANGES_FILENAME, _UPDATED_PLANET_FILENAME):
+        path = settings.osm_data_dir / name
+        if path.is_file():
+            log.info("cleanup: removing intermediate file %s", path)
+            path.unlink()
+
+
+def run_import(
+    settings: Settings,
+    stage: OsmStage | str,
+    *,
+    start_seq: int | None = None,
+    end_seq: int | None = None,
+    dry_run: bool = False,
+) -> None:
+    """Run one OSM import stage (or the full ``all`` pipeline).
+
+    ``all`` = planet download → diff download → merge → apply → imposm
+    import. It does *not* start ``imposm run`` afterwards — continuous
+    updates are owned by ``rbt osm run`` (:func:`run_updates`).
+    """
+    stage = OsmStage(stage)
+    log.info("running OSM import stage: %s", stage.value)
+    if stage is OsmStage.all:
+        download_planet(settings, dry_run=dry_run)
+        download_diffs(settings, start_seq, end_seq, dry_run=dry_run)
+        merge_diffs(settings, dry_run=dry_run)
+        apply_changes(settings, dry_run=dry_run)
+        import_planet(settings, dry_run=dry_run)
+        _cleanup_intermediates(settings, dry_run=dry_run)
+    elif stage is OsmStage.download_planet:
+        download_planet(settings, dry_run=dry_run)
+    elif stage is OsmStage.download_diffs:
+        download_diffs(settings, start_seq, end_seq, dry_run=dry_run)
+    elif stage is OsmStage.merge_diffs:
+        merge_diffs(settings, dry_run=dry_run)
+    elif stage is OsmStage.apply_changes:
+        apply_changes(settings, dry_run=dry_run)
+    elif stage is OsmStage.import_:
+        import_planet(settings, dry_run=dry_run)
+    elif stage is OsmStage.import_diff:
+        import_diffs(settings, dry_run=dry_run)
+
+
+def import_osm(
+    settings: Settings,
+    *,
+    stage: OsmStage | str = OsmStage.all,
+    start_seq: int | None = None,
+    end_seq: int | None = None,
+    dry_run: bool = False,
+) -> None:
+    """Back-compat entry point; thin alias for :func:`run_import`."""
+    run_import(settings, stage, start_seq=start_seq, end_seq=end_seq, dry_run=dry_run)
+
+
+# ---------------------------------------------------------------------------
+# Continuous-update supervisor (imposm run)
+# ---------------------------------------------------------------------------
 
 
 def _pidfile(settings: Settings) -> Path:
@@ -175,4 +580,17 @@ def stop_updates(settings: Settings) -> int:
     return 0
 
 
-__all__ = ["import_osm", "run_updates", "stop_updates", "update_status"]
+__all__ = [
+    "OsmStage",
+    "apply_changes",
+    "download_diffs",
+    "download_planet",
+    "import_diffs",
+    "import_osm",
+    "import_planet",
+    "merge_diffs",
+    "run_import",
+    "run_updates",
+    "stop_updates",
+    "update_status",
+]

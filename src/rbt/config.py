@@ -256,7 +256,10 @@ def _read_conf(path: Path, env: dict[str, str]) -> dict[str, str]:
 
 
 def _coerce_bool(value: str | bool | None, default: bool) -> bool:
-    if value is None:
+    # "" means "unset" (resolve() returns it when no source has the key), so it
+    # must fall back to the default — treating it as False would silently
+    # invert documented-True defaults like OSM_VALIDATE_DOWNLOADS.
+    if value is None or value == "":
         return default
     if isinstance(value, bool):
         return value
