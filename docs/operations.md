@@ -103,6 +103,34 @@ docker compose run --rm rbt-tiles rbt validate
 docker compose run --rm rbt-tiles rbt schema run --type cultural
 ```
 
+## Scheduled integration tests
+
+Beyond the per-PR CI jobs, a **nightly workflow**
+([`.github/workflows/nightly.yml`](https://github.com/MJJ203/rbt-data-generator/blob/main/.github/workflows/nightly.yml))
+exercises the real pipeline end to end on a committed OpenStreetMap extract
+of Liechtenstein (`tests/fixtures/liechtenstein-*.osm.pbf`, ~3.4 MB): imposm
+imports it into a PostGIS service container, `rbt schema run` builds the
+`water`/`landcover`/`highway`/`railway` units (empty reference-table stubs
+from `tests/fixtures/seed_reference_stubs.sql` stand in for the non-OSM
+sources), and `rbt tiles` generates and verifies output in all three
+projections — including tile-join + BTIS consolidation, which no per-PR job
+covers.
+
+- **A red `nightly-osm-fixture` job is a real regression** in the import →
+  schema → tiles path (or a fixture gone stale) — treat it like a failing PR
+  check. Logs are uploaded as a run artifact.
+- **A red `upstream-probe` job** means a live data source (OurAirports, NGA
+  GNS) changed shape or went unavailable; the job is advisory
+  (`continue-on-error`) while it burns in.
+- Trigger manually with `gh workflow run nightly.yml`.
+- Fixture refresh procedure: see
+  [`tests/fixtures/README.md`](https://github.com/MJJ203/rbt-data-generator/blob/main/tests/fixtures/README.md).
+
+The remaining schema units are excluded deliberately: `cultural` and
+`contour` cannot run on a fresh import (see the tracked issues referenced in
+the fixtures README), and `physical`/`aero` need real reference data — both
+are candidates for a phase-2 expansion.
+
 !!! note "Selective setup re-runs"
     `rbt setup` accepts step flags, so a failed initialization can resume
     without repeating the planet import:

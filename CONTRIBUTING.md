@@ -71,6 +71,21 @@ Before requesting review:
 
 CI runs the same checks — you can preview them in `.github/workflows/ci.yml`.
 
+Testing happens at three tiers:
+
+1. **Per-PR unit + dry-run** — the `python` job (ruff, mypy, pytest with a
+   92% coverage floor) and the `smoke-test` job (CLI dry-runs against a
+   PostGIS service container).
+2. **Per-PR seeded integration** — the `integration-tiles` job generates real
+   tiles in every projection from small synthetic seed tables
+   (`tests/fixtures/seed_water.sql`, `seed_building.sql`).
+3. **Nightly OSM fixture** — `.github/workflows/nightly.yml` runs the real
+   import → schema → tiles pipeline on a committed Liechtenstein extract,
+   plus a probe of small live upstream data sources. Trigger it manually
+   with `gh workflow run nightly.yml`; see the
+   [Operations Guide](https://mjj203.github.io/rbt-data-generator/operations/)
+   for what a red run means.
+
 ## Adding a new tile layer
 
 The generators are data-driven; adding a layer means:

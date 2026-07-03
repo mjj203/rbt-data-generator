@@ -28,6 +28,14 @@ mechanism).
 > gazetteer, public domain). It is unrelated to **geonames.org** (CC BY 4.0)
 > — do not apply geonames.org terms to this pipeline.
 
+## Test fixture
+
+The repository additionally commits a small OpenStreetMap extract of
+Liechtenstein (`tests/fixtures/liechtenstein-*.osm.pbf`, © OpenStreetMap
+contributors, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/), extract
+by [Geofabrik](https://download.geofabrik.de/)) used by the nightly
+integration tests — see `tests/fixtures/README.md`.
+
 ## Required attribution on rendered maps
 
 Any map rendered from tiles produced by this pipeline **must** display:

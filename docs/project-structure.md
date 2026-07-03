@@ -68,9 +68,10 @@ rbt-data-generator/
 │   ├── overture_building_processing.sh  # Wrapper: fetch Overture release → DuckDB export
 │   └── duckdb-building-export.sql       # DuckDB SQL: Overture buildings → FlatGeoBuf
 ├── tests/                       # pytest suite (fake_repo / recorded_run fixtures in conftest.py)
+│   └── fixtures/                # Seed SQL + committed Liechtenstein .osm.pbf for the nightly run
 ├── docs/                        # This MkDocs Material site
 ├── output/                      # Generated artifacts (gitignored): tiles/, logs/, temp/
-├── .github/workflows/           # CI (ruff + mypy + pytest) and docs deployment
+├── .github/workflows/           # CI (ruff + mypy + pytest), docs deploy, nightly integration
 ├── docker-compose.yml           # Profiles: setup / production / serve / smoke / monitoring
 ├── Dockerfile.production        # Multi-stage image: GDAL + tippecanoe 2.79.0 + imposm 0.14.2 + rbt
 ├── pyproject.toml               # Python package (`rbt`), ruff / mypy / pytest config

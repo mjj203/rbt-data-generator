@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+- Nightly integration workflow (`.github/workflows/nightly.yml`): imports a
+  committed Liechtenstein OSM extract (`tests/fixtures/liechtenstein-*.osm.pbf`,
+  ODbL — see `tests/fixtures/README.md`) with imposm, runs the
+  `water`/`landcover`/`highway`/`railway` schema units over empty
+  reference-table stubs (`tests/fixtures/seed_reference_stubs.sql`), and
+  generates + verifies tiles in all three projections, including the first CI
+  coverage of tile-join + BTIS consolidation. A separate advisory
+  `upstream-probe` job checks small live data sources (OurAirports, NGA GNS)
+  for schema drift, and a temporary `parity-bridge` job executes the parity
+  runbook's bash-vs-native output comparison on the fixture database ahead of
+  the bash generators' removal.
+
 ## [0.1.0] - 2026-07-02
 
 Initial public release: the `rbt` CLI becomes the single orchestrator over a
