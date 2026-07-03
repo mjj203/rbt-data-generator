@@ -51,9 +51,10 @@ PostgreSQL Database (rbt schema)
     Schema processing (via setup/data-sources/schemas/cultural/)
         ↓
     Three parallel pipelines:
-    ├── generate-cultural-3857-3395.sh → EPSG:3395 (World Mercator)
-    ├── generate-cultural-3857-3395.sh → EPSG:3857 (Web Mercator) 
-    └── generate-cultural-4326.sh → EPSG:4326 (WGS 84)
+    rbt tiles --layer-type cultural:
+    ├── --projection 3395 → EPSG:3395 (World Mercator — tippecanoe backend)
+    ├── --projection 3857 → EPSG:3857 (Web Mercator — tippecanoe backend)
+    └── --projection 4326 → EPSG:4326 (WGS 84 — GDAL MVT backend)
         ↓
     MBTiles output (consolidated vector tiles)
 ```
@@ -229,7 +230,7 @@ WITH railway_subclass AS (
 
 ### EPSG:3395 Pipeline (World Mercator)
 
-The `generate-cultural-3857-3395.sh` script generates tiles in World Mercator projection (via `--projection 3395`), suitable for global datasets with better area preservation than Web Mercator.
+`rbt tiles --layer-type cultural --projection 3395` generates tiles in World Mercator projection, suitable for global datasets with better area preservation than Web Mercator.
 
 #### Key Characteristics:
 - Better for polar regions than Web Mercator
@@ -244,7 +245,7 @@ The `generate-cultural-3857-3395.sh` script generates tiles in World Mercator pr
 
 ### EPSG:3857 Pipeline (Web Mercator)
 
-The `generate-cultural-3857-3395.sh` script (default behavior) generates standard Web Mercator tiles, the de facto standard for web mapping.
+`rbt tiles --layer-type cultural --projection 3857` generates standard Web Mercator tiles, the de facto standard for web mapping.
 
 #### Key Characteristics:
 - Standard for Google Maps, OpenStreetMap, most web maps
@@ -259,7 +260,7 @@ The `generate-cultural-3857-3395.sh` script (default behavior) generates standar
 
 ### EPSG:4326 Pipeline (Geographic WGS 84)
 
-The `generate-cultural-4326.sh` script uses GDAL's MVT driver for direct generation.
+`rbt tiles --layer-type cultural --projection 4326` uses GDAL's MVT driver for direct generation (see the `gdal_mvt:` section of `config/layers.yml`).
 
 #### Key Characteristics:
 - Uses degrees for coordinates
@@ -604,4 +605,4 @@ This metadata ensures compatibility with BTIS-compliant tile servers and applica
 - **[Physical Layers](physical-layers.md)** - Natural feature processing
 - **[Database Initialization](database-initialization.md)** - Database setup process
 - **[OSM Import Pipeline](osm-import.md)** - OpenStreetMap data processing
-- **[Production Documentation](production-readme.md)** - Tile generation operations
+- **[Operations Guide](operations.md)** - Tile generation operations

@@ -212,11 +212,10 @@ Useful switches (see `rbt tiles --help` for the full list):
     refresh, regenerate with `rbt tiles --force` — otherwise the new views
     are silently ignored and the tiles stay stale.
 
-!!! note "`--mode bash` escape hatch"
-    `rbt tiles --mode bash` delegates to the deprecated generators under
-    `production/tile-generation/`. It exists only until the
-    [parity runbook](parity-runbook.md) is executed against real data, after
-    which the bash path is deleted. Don't build automation on it.
+!!! note "Native engine only"
+    Tile generation is fully native Python; the legacy bash generators were
+    removed after the [parity runbook](parity-runbook.md) verification
+    confirmed output parity on real data.
 
 ## Serving Tiles
 

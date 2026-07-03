@@ -1,36 +1,43 @@
 """Pure-Python golden pin of the native tippecanoe command.
 
-Split out from ``test_parity_commands.py``: unlike ``test_parity_bash_native.py``,
-this canary needs neither bash nor a database, so it runs unconditionally in
-every environment (see that module's docstring for the bash-dependent parity
-checks this complements).
+Successor to the retired bash-vs-native parity suite (the bash generators
+were removed after the parity bridge in the nightly workflow confirmed output
+parity on a fixture database — see docs/parity-runbook.md's completion note).
+This canary needs neither bash nor a database, so it runs unconditionally and
+freezes what the registry hands to tippecanoe.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from rbt.config import Settings
+from rbt.layers import LayerRegistry, load_registry
 from rbt.tiles.tippecanoe import build_tippecanoe_command
-from tests.parity_support import registry, settings
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def real_registry() -> LayerRegistry:
+    # Explicit path: independent of RBT_PROJECT_ROOT (scrubbed by the autouse
+    # fixture) and of any fake_repo used elsewhere in the test session.
+    return load_registry(REPO_ROOT / "config" / "layers.yml")
 
 
 def test_native_water_command_matches_frozen_golden(tmp_path: Path) -> None:
     """Golden pin of the native water command from the REAL registry.
 
-    Purpose: the bash-vs-native tests need bash; this pure-Python canary
-    runs everywhere and freezes what `rbt tiles --water` would hand to
-    tippecanoe for EPSG:3857. If it fails, the water entry in config/layers.yml
-    (or build_tippecanoe_command) changed: verify the change is intentional,
-    update this golden list, and keep BASH_ONLY/NATIVE_ONLY_WATER_OPTIONS in
-    ``tests/parity_support.py`` in sync with the new reality.
+    If it fails, the water entry in config/layers.yml (or
+    build_tippecanoe_command) changed: verify the change is intentional, then
+    update this golden list.
     """
-    reg = registry()
+    reg = real_registry()
     layer = reg.layer("water")
     input_file = tmp_path / "water_3857.fgb"
     output_file = tmp_path / "water_3857.mbtiles"
     cmd = build_tippecanoe_command(
         layer=layer,
-        settings=settings(tile_temp_dir=Path("/tmp/tiles")),
+        settings=Settings(project_root=REPO_ROOT, tile_temp_dir=Path("/tmp/tiles")),
         input_file=input_file,
         output_file=output_file,
         registry=reg,

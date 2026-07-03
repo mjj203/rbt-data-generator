@@ -84,7 +84,6 @@ rbt-data-generator/
 │   ├── schema.py / setup_db.py    #   schema dispatch + database bootstrap
 │   └── checks.py                  #   rbt validate / smoke / health
 ├── setup/data-sources/            # Bash leaf importers + imposm mapping + schema SQL
-├── production/                    # DEPRECATED bash tile generators (--mode bash)
 ├── scripts/lib/                   # Shared bash helpers for the leaf scripts
 ├── tools/                         # Standalone utilities (DuckDB buildings export)
 ├── tests/                         # pytest suite

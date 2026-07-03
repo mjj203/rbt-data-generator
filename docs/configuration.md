@@ -37,12 +37,12 @@ Every table below has an **Owner** column, verified against the actual consumers
 
 | Variable | Owner | Default | Purpose |
 |---|---|---|---|
-| `TILE_CACHE_DIR` | Shared | `./output/tiles` | Where MBTiles/PBF tiles are written. Read by both the native engine and the deprecated bash generators (`--mode bash`). |
+| `TILE_CACHE_DIR` | Shared | `./output/tiles` | Where MBTiles/PBF tiles are written. Read by the tile engine. |
 | `TILE_TEMP_DIR` | Shared | `/tmp/tiles` | Scratch space for `tippecanoe -t`. Keep on fast storage. |
 | `TILE_MAX_ZOOM` | Shared | `13` | Maximum zoom level. |
 | `TILE_MIN_ZOOM` | Shared | `0` | Minimum zoom level. |
 | `SUPPORTED_PROJECTIONS` | Bash | `"3857 3395 4326"` | Read-only; the Python CLI derives supported projections from `config/layers.yml` instead. |
-| `DEFAULT_PROJECTION` | Unused (by `rbt tiles`) | `3857` | Loaded into `Settings.default_projection` but not read by `rbt tiles` or `rbt tiles layer` — Typer supplies its own defaults (`--projection all` and `--projection 3857` respectively) regardless of this value. Only consumed by `production/generate-tiles.sh` when invoked directly (outside `--mode bash`). |
+| `DEFAULT_PROJECTION` | Unused | `3857` | Loaded into `Settings.default_projection` but not read by `rbt tiles` or `rbt tiles layer` — Typer supplies its own defaults (`--projection all` and `--projection 3857` respectively) regardless of this value. Kept for backwards compatibility with existing rbt.conf files. |
 | `LAYER_TYPES` | Bash | `"physical cultural"` | Read-only; the Python CLI hardcodes the same two types. |
 
 ### Database connection

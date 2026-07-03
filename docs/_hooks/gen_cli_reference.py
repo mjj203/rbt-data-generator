@@ -29,12 +29,6 @@ time, so it is always in sync with the code.
     top-level command and must appear **before** the subcommand:
     `rbt --no-log-file tiles --dry-run`.
 
-!!! note "Execution modes"
-    `rbt tiles` defaults to the native Python engine. `--mode bash` delegates
-    to the deprecated bash generators under `production/tile-generation/` —
-    an escape hatch kept until the [parity runbook](parity-runbook.md) retires
-    them.
-
 """
 
 

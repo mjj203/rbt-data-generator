@@ -4,7 +4,7 @@ This directory contains the data import scripts and schema SQL used for one-time
 
 ## ⚠️ Important Note
 
-**The setup phase runs ONCE when standing up a new RBT system.** After initialization is complete, ongoing operations (`rbt osm run`, `rbt tiles`) are covered by the [production documentation](production-readme.md).
+**The setup phase runs ONCE when standing up a new RBT system.** After initialization is complete, ongoing operations (`rbt osm run`, `rbt tiles`) are covered by the [Operations Guide](operations.md).
 
 ## 🧭 How the Setup Phase Is Orchestrated
 
@@ -512,7 +512,7 @@ After successful setup:
 2. **Generate initial tiles**: `rbt tiles --all`
 3. **Schedule tile regeneration**: Set up cron jobs or automated triggers
 
-The setup phase is now complete! All future operations use the `rbt` commands described in the [production documentation](production-readme.md).
+The setup phase is now complete! All future operations use the `rbt` commands described in the [Operations Guide](operations.md).
 
 ## 📚 Related Documentation
 
@@ -521,4 +521,4 @@ The setup phase is now complete! All future operations use the `rbt` commands de
 - **[Architecture Overview](architecture.md)** - System design and data flow
 - **[Database Initialization](database-initialization.md)** - Detailed database setup
 - **[OSM Import Pipeline](osm-import.md)** - OpenStreetMap data processing
-- **[Production Documentation](production-readme.md)** - Continuous operations after setup
+- **[Operations Guide](operations.md)** - Continuous operations after setup

@@ -2,12 +2,8 @@
 
 The architecture rule (see CONTRIBUTING.md): only the ``rbt`` CLI dispatches —
 no bash calls Python, no bash calls bash. The scripts reached through
-:func:`delegate` are leaf tasks:
-
-- the four data importers under ``setup/data-sources/`` (download + load
-  external datasets), which remain bash by design, and
-- the deprecated tile generators under ``production/`` (``--mode bash``
-  escape hatch, kept until a real-data parity check retires them).
+:func:`delegate` are the four data-importer leaf tasks under
+``setup/data-sources/`` (download + load external datasets).
 """
 
 from __future__ import annotations
@@ -46,9 +42,4 @@ def delegate(
     )
 
 
-def generate_tiles_bash(settings: Settings, args: list[str], *, dry_run: bool = False) -> None:
-    """Escape hatch: run the deprecated bash tile generators (``--mode bash``)."""
-    delegate("production/generate-tiles.sh", args, settings, dry_run=dry_run)
-
-
-__all__ = ["delegate", "generate_tiles_bash"]
+__all__ = ["delegate"]

@@ -15,12 +15,6 @@ time, so it is always in sync with the code.
     top-level command and must appear **before** the subcommand:
     `rbt --no-log-file tiles --dry-run`.
 
-!!! note "Execution modes"
-    `rbt tiles` defaults to the native Python engine. `--mode bash` delegates
-    to the deprecated bash generators under `production/tile-generation/` —
-    an escape hatch kept until the [parity runbook](parity-runbook.md) retires
-    them.
-
 RBT Vector Tiles CLI — tile generation, OSM updates, and database setup.
 
 **Usage**:
@@ -106,7 +100,6 @@ $ rbt tiles [OPTIONS] COMMAND [ARGS]...
 
 * `--layer-type [physical|cultural|all]`: [default: all]
 * `--projection [3857|3395|4326|all]`: [default: all]
-* `--mode [native|bash]`: native (Python engine) or bash (delegate to legacy scripts).  [default: native]
 * `--all`: Generate every layer in every projection.
 * `--tile-join / --no-tile-join`: [default: tile-join]
 * `--add-btis / --no-btis`: [default: add-btis]

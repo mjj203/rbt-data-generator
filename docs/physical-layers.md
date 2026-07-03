@@ -55,10 +55,10 @@ PostgreSQL Database (rbt schema)
         ├── --water-features (water processing)
         └── --terrain (terrain/contour processing)
         ↓
-    Unified Tile Generation:
-    ├── generate-physical-3857-3395.sh --projection 3857 (Web Mercator)
-    ├── generate-physical-3857-3395.sh --projection 3395 (World Mercator)
-    └── generate-physical-4326.sh (Geographic WGS 84 - GDAL MVT)
+    Unified Tile Generation (rbt tiles --layer-type physical):
+    ├── --projection 3857 (Web Mercator — tippecanoe backend)
+    ├── --projection 3395 (World Mercator — tippecanoe backend)
+    └── --projection 4326 (Geographic WGS 84 — GDAL MVT backend)
         ↓
     MBTiles output (individual or consolidated)
 ```
@@ -102,21 +102,20 @@ schema run <key>`:
 
 ### Tile Generation Scripts
 
-#### **`generate-physical-3857-3395.sh`** - Unified Tile Generation
-A comprehensive script for generating vector tiles with configurable options:
+#### Mercator tile generation (`rbt tiles`, tippecanoe backend)
 
 ```bash
-# Generate all layers in Web Mercator (default)
-./production/tile-generation/physical/generate-physical-3857-3395.sh --all
+# Generate all physical layers in every projection
+rbt tiles --layer-type physical --all
 
 # Generate specific layers with projection selection
-./production/tile-generation/physical/generate-physical-3857-3395.sh --projection 3395 --water --landcover --glacier
+rbt tiles --layer-type physical --projection 3395 --water --landcover --glacier
 
-# Generate with tile joining and BTIS metadata
-./production/tile-generation/physical/generate-physical-3857-3395.sh --all --tile-join --add-btis
+# Tile joining + BTIS metadata are on by default; disable with
+# --no-tile-join / --no-btis
 
-# Generate single layer in specific projection
-./production/tile-generation/physical/generate-physical-3857-3395.sh --projection 3857 --builtuparea
+# Generate single category in a specific projection
+rbt tiles --layer-type physical --projection 3857 --builtuparea
 ```
 
 **Key Features:**
@@ -140,12 +139,12 @@ A comprehensive script for generating vector tiles with configurable options:
 - `--waterway`: Linear water features (rivers, streams, canals)
 - `--inland-water`: Intermittent water features
 
-#### **`generate-physical-4326.sh`** - Geographic Coordinate Tiles
-Specialized script using GDAL's MVT driver for EPSG:4326 tiles:
+#### EPSG:4326 — Geographic Coordinate Tiles (GDAL-MVT backend)
+`rbt tiles --projection 4326` drives GDAL's MVT driver directly:
 
 ```bash
 # Generate all physical layers in EPSG:4326
-./production/tile-generation/physical/generate-physical-4326.sh
+rbt tiles --layer-type physical --projection 4326
 ```
 
 **Key Features:**
@@ -162,13 +161,13 @@ Specialized script using GDAL's MVT driver for EPSG:4326 tiles:
 #### **ogr2ogr (GDAL)**
 A command-line utility for converting between geospatial data formats. Used in two approaches:
 
-**FlatGeoBuf Export Approach** (`generate-physical-3857-3395.sh`):
+**FlatGeoBuf Export Approach** (EPSG:3857/3395, `src/rbt/tiles/exporter.py`):
 - Export data from PostgreSQL to FlatGeoBuf (.fgb) intermediate format
 - Transform coordinate systems during export
 - Apply SQL filters for selective data export
 - Handle Natural Earth and OSM data sources
 
-**Direct MVT Approach** (`generate-physical-4326.sh`):
+**Direct MVT Approach** (EPSG:4326, `src/rbt/tiles/gdal_mvt.py`):
 - Direct PostgreSQL to MVT conversion using GDAL's MVT driver
 - Custom tiling schemes with geographic coordinates
 - JSON-based layer configuration
@@ -807,8 +806,8 @@ Filter configuration controls:
     Use `rbt schema run <physical|landcover|water|contour>` (or `--type
     physical` / `--all`) in place of `process-physical-schemas.sh`, and `rbt
     tiles --layer-type physical --projection <3857|3395|4326> [--water
-    --landcover ...]` in place of `generate-physical-3857-3395.sh` /
-    `generate-physical-4326.sh`. See the [CLI Reference](cli.md) for every flag.
+    --landcover ...]` in place of the retired per-projection generator
+    scripts. See the [CLI Reference](cli.md) for every flag.
 
 ### SQL Processing Commands
 
@@ -833,26 +832,29 @@ Filter configuration controls:
 
 ### Tile Generation Commands
 
-#### **`generate-physical-3857-3395.sh` Usage**
+#### `rbt tiles` usage (physical layers)
 ```bash
-# Generate all layers (default Web Mercator)
-./production/tile-generation/physical/generate-physical-3857-3395.sh --all
+# Generate all physical layers in every projection
+rbt tiles --layer-type physical --all
 
 # Projection selection
-./production/tile-generation/physical/generate-physical-3857-3395.sh --projection 3857 --all    # Web Mercator (default)
-./production/tile-generation/physical/generate-physical-3857-3395.sh --projection 3395 --all    # World Mercator
+rbt tiles --layer-type physical --projection 3857   # Web Mercator
+rbt tiles --layer-type physical --projection 3395   # World Mercator
+rbt tiles --layer-type physical --projection 4326   # Geographic (GDAL-MVT backend)
 
 # Selective layer generation
-./production/tile-generation/physical/generate-physical-3857-3395.sh --water --landcover --glacier
-./production/tile-generation/physical/generate-physical-3857-3395.sh --projection 3395 --builtuparea --contour
+rbt tiles --layer-type physical --water --landcover --glacier
+rbt tiles --layer-type physical --projection 3395 --builtuparea --contour
 
-# Consolidation and metadata options
-./production/tile-generation/physical/generate-physical-3857-3395.sh --all --tile-join                    # Merge layers into single MBTiles
-./production/tile-generation/physical/generate-physical-3857-3395.sh --all --tile-join --add-btis         # Add BTIS metadata
-./production/tile-generation/physical/generate-physical-3857-3395.sh --projection 3395 --water --add-btis # Single layer with metadata
+# Consolidation and metadata (both ON by default)
+rbt tiles --layer-type physical --projection 3857 --water --no-tile-join   # keep per-layer MBTiles
+rbt tiles --layer-type physical --projection 3857 --water --no-btis        # skip BTIS metadata
+
+# Single layer by registry key
+rbt tiles layer water --projection 3395
 
 # Help and options
-./production/tile-generation/physical/generate-physical-3857-3395.sh --help
+rbt tiles --help
 ```
 
 **Layer Options:**
@@ -867,10 +869,10 @@ Filter configuration controls:
 - `--waterway`: Linear water features
 - `--inland-water`: Intermittent water features
 
-#### **`generate-physical-4326.sh` Usage**
+#### EPSG:4326 usage (GDAL MVT backend)
 ```bash
-# Generate all layers in EPSG:4326 using GDAL MVT driver
-./production/tile-generation/physical/generate-physical-4326.sh
+# Generate all layers in EPSG:4326 using GDAL's MVT driver
+rbt tiles --layer-type physical --projection 4326
 ```
 
 **Environment Variables Required:**
@@ -1289,4 +1291,4 @@ VALUES('btp_schema_version','1.0.0');
 - **[Cultural Layers](cultural-layers.md)** - Human infrastructure processing
 - **[Database Initialization](database-initialization.md)** - Database setup process
 - **[OSM Import Pipeline](osm-import.md)** - OpenStreetMap data processing
-- **[Production Documentation](production-readme.md)** - Tile generation operations
+- **[Operations Guide](operations.md)** - Tile generation operations

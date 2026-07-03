@@ -265,5 +265,4 @@ Open <http://localhost:8080> and you should see your data sources listed, with a
 - **[Operations Guide](operations.md)** — continuous OSM replication with `rbt osm run` / `status` / `stop`, scheduled tile generation, and monitoring.
 - **[rbt CLI Reference](cli.md)** — every command and flag.
 - **[Architecture](architecture.md)** — how the orchestrator, importers, and tile engine fit together.
-- **[Parity Runbook](parity-runbook.md)** — the deprecated bash tile generators remain reachable via `rbt tiles --mode bash` until the native engine is verified against real data.
 - **[Troubleshooting](troubleshooting.md)** — common failures and fixes.

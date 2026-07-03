@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from rbt.commands.tiles import CULTURAL_CATEGORY_FLAGS, PHYSICAL_CATEGORY_FLAGS
 from rbt.layers import LayerRegistryError, load_registry
 
 # Base for every malformed-config test: one valid cultural layer explicitly
@@ -156,3 +157,16 @@ def test_every_layer_has_source_table() -> None:
         assert layer.source_table.startswith("rbt."), (
             f"{layer.key} source_table does not live in rbt schema: {layer.source_table}"
         )
+
+
+def test_cli_category_flag_tuples_match_live_registry() -> None:
+    """The hardcoded ``rbt tiles`` category flags must equal the categories in
+    ``config/layers.yml``.
+
+    Relocated from the retired parity suite (runbook §4.6): a category added
+    straight to the YAML without updating the Python constants — or vice
+    versa — must fail loudly here.
+    """
+    registry = load_registry()
+    assert set(PHYSICAL_CATEGORY_FLAGS) == set(registry.categories_for("physical"))
+    assert set(CULTURAL_CATEGORY_FLAGS) == set(registry.categories_for("cultural"))

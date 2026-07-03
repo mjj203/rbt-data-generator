@@ -1,6 +1,6 @@
 """CLI-level coverage for operational commands not exercised elsewhere:
 ``rbt validate``, ``rbt health``, ``rbt smoke``, ``rbt osm status``,
-``rbt schema run``, and ``rbt tiles --mode bash``.
+and ``rbt schema run``.
 
 Unlike ``tests/test_checks.py`` (which calls the underlying functions
 directly), these tests go through ``CliRunner`` to confirm the Typer wiring
@@ -158,35 +158,3 @@ def test_cli_setup_all_with_step_flag_is_rejected(fake_repo: Path, recorded_run)
     assert result.exit_code != 0
     assert "--all" in result.output
     assert recorded_run.calls == []
-
-
-# ---------------------------------------------------------------------------
-# rbt tiles --mode bash
-# ---------------------------------------------------------------------------
-
-
-def test_cli_tiles_mode_bash_delegates_to_generate_tiles_sh(fake_repo: Path, recorded_run) -> None:
-    script = fake_repo / "production" / "generate-tiles.sh"
-    script.parent.mkdir(parents=True, exist_ok=True)
-    script.write_text("#!/bin/sh\necho stub\n", encoding="utf-8")
-
-    result = runner.invoke(
-        app,
-        [
-            "--no-log-file",
-            "tiles",
-            "--mode",
-            "bash",
-            "--layer-type",
-            "physical",
-            "--projection",
-            "3857",
-            "--water",
-            "--dry-run",
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    [call] = recorded_run.calls
-    assert call["cmd"][:2] == ["bash", str(script)]
-    assert "--layer-type" in call["cmd"]
-    assert "--water" in call["cmd"]

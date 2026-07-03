@@ -4,7 +4,7 @@ The 4326 pipeline does not use tippecanoe. GDAL's MVT driver cuts the tiles
 directly from PostGIS in a single multi-table ``ogr2ogr -f MVT`` invocation,
 using a CONF json that maps each source table to a target MVT layer with a
 per-table zoom window. This module is the Python replacement for
-``production/tile-generation/*/generate-*-4326.sh``.
+the retired bash 4326 generators.
 
 Output is a tile *directory* (``{z}/{x}/{y}.pbf`` plus ``metadata.json``),
 not an MBTiles file.

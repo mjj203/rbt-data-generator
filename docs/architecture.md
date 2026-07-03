@@ -63,9 +63,9 @@ The dispatch rule is strict and one-directional:
 - Everything else — database bootstrap, schema processing, OSM update
   supervision, tile generation, health checks — is native Python under
   `src/rbt/`.
-- The bash tile generators under `production/` are **deprecated**, reachable
-  only through the `rbt tiles --mode bash` escape hatch until the
-  [parity runbook](parity-runbook.md) retires them.
+- Tile generation is fully native; the legacy bash generators were removed
+  after output parity was verified (see the
+  [parity runbook](parity-runbook.md) completion note).
 
 ## 📂 Directory Architecture
 
@@ -81,9 +81,6 @@ summary here is just the shape of the split:
   backends, `importers/` for the bash-leaf wrappers).
 - **`setup/data-sources/`** — the four bash leaf importers + PL/pgSQL schema
   sources.
-- **`production/`** — deprecated bash tile generators, reachable only via
-  `rbt tiles --mode bash` until the [parity runbook](parity-runbook.md)
-  retires them.
 - **`config/`** — `rbt.conf`, `layers.yml`, and the service configs
   (`postgresql.conf`, `tile-server.json`, `prometheus.yml`).
 - **`tests/`**, **`docs/`**, **`output/`** — pytest suite, this MkDocs site,
@@ -109,8 +106,6 @@ summary here is just the shape of the split:
 **Key Components**:
 - `rbt tiles` - Native tile generation engine (`src/rbt/tiles/`)
 - `rbt osm run` - Continuous OSM updates (supervised `imposm run`)
-- `production/tile-generation/` - Deprecated bash generators, kept only for
-  the `--mode bash` escape hatch
 
 **Execution Pattern**: Run continuously or on-demand — see the
 [Operations Guide](operations.md) for the Compose profiles and runbooks
@@ -232,14 +227,6 @@ graph LR
     families (e.g. `rbt.contour_z8` … `rbt.contour`) onto a single target MVT
     layer with per-table zoom windows. The output is a tile *directory*, not
     an MBTiles file, and tile-join/BTIS do not apply.
-
-!!! warning "`--mode bash` rejects `--force` and `--layer`"
-    The deprecated bash generator (`rbt tiles --mode bash`) has no equivalent
-    for the native engine's `--force` (re-export cached FlatGeoBuf) or
-    `--layer` (single-layer-by-key) flags. Rather than silently drop them,
-    `rbt tiles` fails loudly with a `BadParameter` error if either is passed
-    alongside `--mode bash` (`src/rbt/commands/tiles.py:153-165`) — use the
-    native engine (the default) if you need those flags.
 
 ### Layer Processing Strategy
 
@@ -412,4 +399,4 @@ output/tiles/<type>/<projection>/
 - **[Physical Layers](physical-layers.md)** - Natural feature processing
 - **[Cultural Layers](cultural-layers.md)** - Human infrastructure processing
 - **[Database Initialization](database-initialization.md)** - Database setup process
-- **[Parity Runbook](parity-runbook.md)** - Retiring the deprecated bash tile generators
+- **[Parity Runbook](parity-runbook.md)** - How the retired bash generators' output parity was verified

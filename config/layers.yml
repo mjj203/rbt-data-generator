@@ -2,10 +2,10 @@
 # RBT Vector Tiles — Layer Registry
 # =============================================================================
 # Declarative definition of every tile layer the pipeline produces. The Python
-# CLI (`src/rbt`) consumes this file to dispatch tippecanoe / ogr2ogr commands;
-# the legacy Bash generators under `production/tile-generation/` still contain
-# the ground truth for inline tippecanoe JSON filters and are kept for parity
-# checks. When adding a new layer, prefer extending this file over editing bash.
+# CLI (`src/rbt`) consumes this file to dispatch tippecanoe / ogr2ogr commands.
+# This file is the single source of truth for layer definitions (the legacy
+# bash generators it was extracted from were removed after output parity was
+# verified — see docs/parity-runbook.md). Add new layers here.
 #
 # Schema (per layer):
 #   source_table:        Postgres table/view used as ogr2ogr input (required).

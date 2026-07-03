@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from rbt.bash import delegate, generate_tiles_bash
+from rbt.bash import delegate
 from rbt.config import load_settings
 
 
@@ -55,16 +55,3 @@ def test_delegate_forwards_dry_run_and_log_file(fake_repo: Path, recorded_run) -
     call = recorded_run.calls[0]
     assert call["dry_run"] is True
     assert call["log_file"] == log_file
-
-
-def test_generate_tiles_bash_targets_deprecated_script(fake_repo: Path, recorded_run) -> None:
-    _make_script(fake_repo, "production/generate-tiles.sh")
-    settings = load_settings()
-
-    generate_tiles_bash(settings, ["--all"], dry_run=True)
-
-    call = recorded_run.calls[0]
-    assert call["cmd"][0] == "bash"
-    assert call["cmd"][1] == str(fake_repo.resolve() / "production/generate-tiles.sh")
-    assert call["cmd"][2:] == ["--all"]
-    assert call["dry_run"] is True

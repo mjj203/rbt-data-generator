@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Removed
+- The deprecated bash tile generators (`production/generate-tiles.sh` and the
+  four scripts under `production/tile-generation/`, ~5,800 lines) and the
+  `rbt tiles --mode bash` escape hatch. Output parity between the bash and
+  native engines was verified by the temporary `parity-bridge` nightly job on
+  the fixture database (per-zoom tile counts, metadata, and decoded layer
+  sets); `docs/parity-runbook.md` now records the completed verification. The
+  bash-vs-native parity test suite retired with it — its two bash-independent
+  guardrails live on as `tests/test_tippecanoe_golden.py` and
+  `tests/test_layers.py::test_cli_category_flag_tuples_match_live_registry`.
+
 ### Added
 - Nightly integration workflow (`.github/workflows/nightly.yml`): imports a
   committed Liechtenstein OSM extract (`tests/fixtures/liechtenstein-*.osm.pbf`,

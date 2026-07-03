@@ -4,10 +4,10 @@ Reads the layer registry at ``config/layers.yml`` and dispatches the right
 backend per projection:
 
 - **EPSG:3857 / EPSG:3395** — ogr2ogr → FlatGeoBuf → tippecanoe → MBTiles
-  (replaces ``production/tile-generation/*/generate-*-3857-3395.sh``).
+  (successor to the retired bash Mercator generators).
 - **EPSG:4326** — GDAL's MVT driver writes a tile directory in one
-  multi-table ogr2ogr call (replaces ``generate-*-4326.sh``); tippecanoe is
-  not involved and tile-join/BTIS do not apply.
+  multi-table ogr2ogr call (successor to the retired bash 4326 generators);
+  tippecanoe is not involved and tile-join/BTIS do not apply.
 """
 
 from __future__ import annotations

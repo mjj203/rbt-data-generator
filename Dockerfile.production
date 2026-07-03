@@ -165,10 +165,9 @@ WORKDIR /app
 COPY config/ ./config/
 COPY scripts/ ./scripts/
 COPY setup/ ./setup/
-COPY production/ ./production/
 COPY tools/ ./tools/
 
-RUN find ./setup ./production ./tools ./scripts -name "*.sh" -exec chmod +x {} \; \
+RUN find ./setup ./tools ./scripts -name "*.sh" -exec chmod +x {} \; \
     && mkdir -p output/logs output/tiles cache \
     && groupadd --system rbt \
     && useradd --system --gid rbt --home-dir /app --shell /usr/sbin/nologin rbt \

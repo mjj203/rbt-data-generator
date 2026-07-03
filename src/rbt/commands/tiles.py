@@ -4,11 +4,9 @@ The category flags (``--water``, ``--building``, ...) are declared once as
 Typer options (required, since Typer introspects the function signature to
 build the CLI), then immediately normalized into a single :class:`TileRequest`
 by :func:`_build_tile_request` — a pure function keyed on the same
-underscore-form category names the layer registry uses. Both the native
-engine (:func:`_dispatch_native`) and the deprecated bash escape hatch
-(:func:`_dispatch_bash`) consume that one request object, so the two dispatch
-paths can never drift on flag spelling (bash argument names are derived from
-the request's own keys, not hand-duplicated).
+underscore-form category names the layer registry uses. The dispatcher
+(:func:`_dispatch_native`) consumes only that request object, never the raw
+Typer parameters.
 """
 
 from __future__ import annotations
@@ -20,7 +18,6 @@ from typing import Any
 
 import typer
 
-from ..bash import generate_tiles_bash
 from ..config import Settings
 from ..layers import LayerRegistry, load_registry
 from ..tiles import TileEngine
@@ -43,15 +40,9 @@ class ProjectionChoice(str, Enum):
     all = "all"
 
 
-class Mode(str, Enum):
-    native = "native"
-    bash = "bash"
-
-
 # Canonical, underscore-form category names — the single source of truth for
-# both the Typer parameter names below and the registry category lookups.
-# Bash argument spelling is derived from these via ``str.replace("_", "-")``,
-# so the two can never diverge (see module docstring).
+# both the Typer parameter names below and the registry category lookups
+# (tests/test_layers.py asserts they match config/layers.yml exactly).
 CULTURAL_CATEGORY_FLAGS: tuple[str, ...] = (
     "aeroway",
     "boundary",
@@ -87,7 +78,6 @@ class TileRequest:
 
     layer_type: LayerType
     projection: ProjectionChoice
-    mode: Mode
     tile_join: bool
     add_btis: bool
     dry_run: bool
@@ -113,7 +103,6 @@ def _build_tile_request(local_flags: dict[str, Any]) -> TileRequest:
     return TileRequest(
         layer_type=layer_type,
         projection=projection,
-        mode=local_flags["mode"],
         tile_join=local_flags["tile_join"],
         add_btis=local_flags["add_btis"],
         dry_run=local_flags["dry_run"],
@@ -123,10 +112,6 @@ def _build_tile_request(local_flags: dict[str, Any]) -> TileRequest:
         physical_flags=physical_flags,
         layer_keys=tuple(local_flags["layer"] or ()),
     )
-
-
-def _bash_flag_name(category: str) -> str:
-    return category.replace("_", "-")
 
 
 def _selected_categories(request: TileRequest) -> list[str]:
@@ -150,20 +135,6 @@ def _validate_request(request: TileRequest) -> None:
             "--layer; use one or the other."
         )
 
-    # The deprecated bash generator has no --force/--layer equivalent, so
-    # forwarding is impossible; fail loudly instead of silently ignoring them.
-    if request.mode is Mode.bash:
-        dropped = [
-            name
-            for name, used in (("--force", request.force), ("--layer", bool(request.layer_keys)))
-            if used
-        ]
-        if dropped:
-            raise typer.BadParameter(
-                f"{', '.join(dropped)} not supported with --mode bash "
-                "(the legacy generator has no equivalent); use the native engine."
-            )
-
 
 def _projections_for(projection: ProjectionChoice, registry: LayerRegistry) -> list[str]:
     if projection is ProjectionChoice.all:
@@ -179,25 +150,6 @@ def _enabled_categories(
         for cat, enabled in flags.items()
         if enabled and cat in registry.categories_for(layer_type)
     ]
-
-
-def _dispatch_bash(request: TileRequest, settings: Settings, log: logging.Logger) -> None:
-    args: list[str] = []
-    if request.all_:
-        args.append("--all")
-    else:
-        args += ["--layer-type", request.layer_type.value]
-        args += ["--projection", request.projection.value]
-        for category, enabled in {**request.cultural_flags, **request.physical_flags}.items():
-            if enabled:
-                args.append(f"--{_bash_flag_name(category)}")
-    if not request.tile_join:
-        args.append("--no-tile-join")
-    if not request.add_btis:
-        args.append("--no-btis")
-
-    log.info("delegating to production/generate-tiles.sh %s", " ".join(args))
-    generate_tiles_bash(settings, args, dry_run=request.dry_run)
 
 
 def _dispatch_native(request: TileRequest, settings: Settings, log: logging.Logger) -> None:
@@ -253,9 +205,6 @@ def tiles_entry(
     ctx: typer.Context,
     layer_type: LayerType = typer.Option(LayerType.all, "--layer-type"),
     projection: ProjectionChoice = typer.Option(ProjectionChoice.all, "--projection"),
-    mode: Mode = typer.Option(
-        Mode.native, "--mode", help="native (Python engine) or bash (delegate to legacy scripts)."
-    ),
     all_: bool = typer.Option(False, "--all", help="Generate every layer in every projection."),
     tile_join: bool = typer.Option(True, "--tile-join/--no-tile-join"),
     add_btis: bool = typer.Option(True, "--add-btis/--no-btis"),
@@ -297,7 +246,6 @@ def tiles_entry(
         {
             "layer_type": layer_type,
             "projection": projection,
-            "mode": mode,
             "all_": all_,
             "tile_join": tile_join,
             "add_btis": add_btis,
@@ -328,10 +276,7 @@ def tiles_entry(
     settings = settings_from_ctx(ctx)
     log: logging.Logger = ctx.obj["log"]
 
-    if request.mode is Mode.bash:
-        _dispatch_bash(request, settings, log)
-    else:
-        _dispatch_native(request, settings, log)
+    _dispatch_native(request, settings, log)
 
 
 @tiles_app.command("layer")
@@ -348,4 +293,4 @@ def tiles_layer_cmd(
     )
 
 
-__all__ = ["Mode", "ProjectionChoice", "TileRequest", "tiles_app"]
+__all__ = ["ProjectionChoice", "TileRequest", "tiles_app"]

@@ -120,14 +120,13 @@ The 4326 backend uses GDAL's MVT driver, not tippecanoe. Expect:
 - One multi-table `ogr2ogr -f MVT` call produces the dataset; check
   `<layer_type>_4326_mvt.log` in the output directory for driver errors.
 
-### Deprecated bash escape hatch
+### Suspected engine regressions
 
-If you suspect an engine regression, the deprecated bash generators are still
-reachable for comparison (see [parity-runbook.md](parity-runbook.md)):
-
-```bash
-rbt tiles --mode bash --layer-type physical --projection 3857 --water --dry-run
-```
+The nightly `nightly-osm-fixture` workflow generates and verifies tiles from
+a known fixture in all three projections — compare a red/green nightly run
+against your change before assuming a local misconfiguration. The frozen
+tippecanoe command pin in `tests/test_tippecanoe_golden.py` catches
+unintended registry drift.
 
 ## Missing `postgresql.conf`, `tile-server.json`, or `prometheus.yml`
 

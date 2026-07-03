@@ -26,7 +26,7 @@ jobs:
       - name: shellcheck
         run: |
           set -euxo pipefail
-          find setup production tools scripts \
+          find setup tools scripts \
             -type f -name "*.sh" -print0 \
             | xargs -0 shellcheck --severity=warning --external-sources
 
@@ -236,15 +236,9 @@ jobs:
           ~/.local/bin/uv run rbt --no-log-file tiles --layer-type cultural --projection 4326 --building --dry-run
           ~/.local/bin/uv run rbt --no-log-file schema run --all --dry-run
       - name: Verify psql connectivity to the service container
-        # Unredirected on purpose: generate-tiles.sh's own pre-flight swallows
-        # psql's stderr, so any connection problem must surface here first.
         run: |
           command -v psql
           psql "host=localhost port=5432 dbname=rbt user=rbt_user password=rbt_password" -c 'SELECT version()'
-      - name: Dry-run validation (deprecated bash path)
-        run: |
-          ./production/generate-tiles.sh --layer-type physical --projection 3857 --water --dry-run
-          ./production/generate-tiles.sh --layer-type cultural --projection 4326 --building --dry-run
 
   integration-tiles:
     runs-on: ubuntu-latest

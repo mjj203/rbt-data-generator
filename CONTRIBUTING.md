@@ -42,10 +42,7 @@ overwrite it.
 calls another bash script. The bash that remains is leaf-only:
 
 - the four data importers under `setup/data-sources/` (reached via
-  `rbt import ...` / `rbt setup`), and
-- the deprecated tile generators under `production/` (reached via
-  `rbt tiles --mode bash`, pending removal per
-  [docs/parity-runbook.md](https://mjj203.github.io/rbt-data-generator/parity-runbook/)).
+  `rbt import ...` / `rbt setup`).
 
 New orchestration logic belongs in `src/rbt/`; new layer definitions belong in
 [`config/layers.yml`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/layers.yml), never in bash.

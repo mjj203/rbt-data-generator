@@ -1,11 +1,10 @@
 # scripts/lib/
 
-Shared Bash helpers sourced by every Bash script in this repository — the four
-data importer leaf scripts under `setup/data-sources/` (invoked via
-`rbt import` / `rbt setup`) and the deprecated tile generators under
-`production/` (reachable only via `rbt tiles --mode bash`). Sourcing these
-files is the way scripts should acquire logging, configuration, and database
-connection helpers — do not reimplement them locally.
+Shared Bash helpers sourced by every Bash script in this repository — the
+four data importer leaf scripts under `setup/data-sources/` (invoked via
+`rbt import` / `rbt setup`). Sourcing these files is the way scripts should
+acquire logging, configuration, and database connection helpers — do not
+reimplement them locally.
 
 ## Files
 

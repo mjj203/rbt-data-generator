@@ -6,7 +6,7 @@ remaining bash scripts, and a suggested reading order.
 
 The one-sentence summary: **declarative configuration in `config/`, all
 orchestration in `src/rbt/`, four bash leaf importers in `setup/data-sources/`,
-deprecated bash generators in `production/`, artifacts in `output/`.**
+artifacts in `output/`.**
 
 ## Repository layout
 
@@ -21,7 +21,7 @@ rbt-data-generator/
 ├── src/rbt/                     # The `rbt` CLI — the ONLY orchestrator
 │   ├── cli.py                   # Thin Typer app assembler: global options + mounts commands/
 │   ├── commands/                # One module per command group (thin Typer wiring; logic lives elsewhere)
-│   │   ├── tiles.py             # `rbt tiles` — TileRequest normalization shared by native + `--mode bash`
+│   │   ├── tiles.py             # `rbt tiles` — TileRequest normalization + native engine dispatch
 │   │   ├── setup.py             # `rbt setup` — bootstrap + import + schema orchestration
 │   │   ├── importers.py         # `rbt import osm|reference|geonames|buildings`
 │   │   ├── osm.py               # `rbt osm run|status|stop` (alias of `rbt import osm` for run/status/stop)
@@ -56,11 +56,6 @@ rbt-data-generator/
 │   └── schemas/                 # 8 PL/pgSQL files that create the rbt.* views (run via `rbt schema`)
 │       ├── physical/            # physical-core, landcover, water-features, terrain
 │       └── cultural/            # cultural-core, transportation, transportation-railway, infrastructure
-├── production/                  # DEPRECATED bash tile generators (only reachable via `rbt tiles --mode bash`)
-│   ├── generate-tiles.sh
-│   └── tile-generation/
-│       ├── physical/            # generate-physical-3857-3395.sh, generate-physical-4326.sh
-│       └── cultural/            # generate-cultural-3857-3395.sh, generate-cultural-4326.sh
 ├── scripts/lib/                 # Shared bash helpers sourced by the leaf scripts
 │   ├── config.sh                # rbt_config_load: DATABASE_* / PG_* / libpq PG* resolution
 │   └── logging.sh               # log_info / log_error helpers
@@ -140,15 +135,14 @@ Two groups of bash survive:
   Each has a `CONTRACT` header documenting inputs, outputs, and exit codes,
   and is invoked via `rbt import {osm,reference,geonames,buildings}` (or as
   steps of `rbt setup`).
-- **The deprecated tile generators** under `production/` — reachable only via
-  the `rbt tiles --mode bash` escape hatch, kept until the real-data
-  comparison in the [Parity Runbook](parity-runbook.md) retires them. The
-  native Python engine is the default.
 
 The earlier bash orchestrators (`setup/init-database.sh`,
 `production/update-osm.sh`, the `tools/*.sh` check scripts
-`validate-environment.sh`/`health-check.sh`/`smoke-test.sh`, and the per-type
-`process-*-schemas.sh`) have been **deleted**; their functionality lives in
+`validate-environment.sh`/`health-check.sh`/`smoke-test.sh`, the per-type
+`process-*-schemas.sh`, and the four tile generators under
+`production/tile-generation/` with their `generate-tiles.sh` dispatcher —
+retired after the [Parity Runbook](parity-runbook.md) verification) have been
+**deleted**; their functionality lives in
 `rbt setup`, `rbt osm`, `rbt validate|smoke|health`, and `rbt schema`. Only
 *orchestrators* were removed — `tools/overture_building_processing.sh` (a
 standalone leaf utility, not an orchestrator) is intentionally kept; see
@@ -192,7 +186,7 @@ fast storage; see [Performance & Sizing](performance.md).
 ```mermaid
 graph LR
     rbt(["rbt<br/>--verbose --debug --log-file"])
-    rbt --> tiles["tiles<br/>--layer-type · --projection<br/>category flags · --mode native/bash"]
+    rbt --> tiles["tiles<br/>--layer-type · --projection<br/>category flags · --layer KEY"]
     tiles --> tileslayer["layer KEY<br/>single layer + projection"]
     rbt --> setup["setup<br/>--all or per-step flags"]
     rbt --> schema["schema<br/>list · run KEYS"]
