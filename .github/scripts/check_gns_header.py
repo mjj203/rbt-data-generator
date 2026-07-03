@@ -14,12 +14,22 @@ import zipfile
 
 def main() -> None:
     with zipfile.ZipFile(sys.argv[1]) as zf:
-        txt = [n for n in zf.namelist() if n.endswith(".txt")]
-        assert txt, f"no .txt member in archive: {zf.namelist()}"
-        header = zf.open(txt[0]).readline().decode("utf-8", "replace")
+        # Skip the disclaimer/guide text files the archives ship alongside the
+        # data (mirrors the importer's own member filtering); the data file is
+        # by far the largest remaining .txt.
+        candidates = [
+            info
+            for info in zf.infolist()
+            if info.filename.endswith(".txt")
+            and "disclaimer" not in info.filename.lower()
+            and "guide" not in info.filename.lower()
+        ]
+        assert candidates, f"no data .txt member in archive: {zf.namelist()}"
+        data = max(candidates, key=lambda info: info.file_size)
+        header = zf.open(data).readline().decode("utf-8", "replace")
     for col in ("lat_dd", "long_dd"):
-        assert col in header, f"expected column {col!r} in {header!r}"
-    print("GNS header OK:", header.strip()[:120])
+        assert col in header, f"expected column {col!r} in {header!r} ({data.filename})"
+    print(f"GNS header OK ({data.filename}):", header.strip()[:120])
 
 
 if __name__ == "__main__":

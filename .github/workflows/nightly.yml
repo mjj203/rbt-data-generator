@@ -67,7 +67,7 @@ jobs:
           curl -fsSL "https://github.com/mamba-org/micromamba-releases/releases/download/2.8.1-0/micromamba-linux-64" \
             -o /usr/local/bin/micromamba
           sudo chmod +x /usr/local/bin/micromamba
-          MAMBA_ROOT_PREFIX="$HOME/micromamba" /usr/local/bin/micromamba create -y -n geo -c conda-forge gdal=3.13.1
+          MAMBA_ROOT_PREFIX="$HOME/micromamba" /usr/local/bin/micromamba create -y -n geo -c conda-forge gdal=3.13.1 libgdal-postgresql=3.13.1
           echo "$HOME/micromamba/envs/geo/bin" >> "$GITHUB_PATH"
       - name: Install imposm 0.14.2
         run: |
@@ -284,7 +284,7 @@ jobs:
           curl -fsSL "https://github.com/mamba-org/micromamba-releases/releases/download/2.8.1-0/micromamba-linux-64" \
             -o /usr/local/bin/micromamba
           sudo chmod +x /usr/local/bin/micromamba
-          MAMBA_ROOT_PREFIX="$HOME/micromamba" /usr/local/bin/micromamba create -y -n geo -c conda-forge gdal=3.13.1
+          MAMBA_ROOT_PREFIX="$HOME/micromamba" /usr/local/bin/micromamba create -y -n geo -c conda-forge gdal=3.13.1 libgdal-postgresql=3.13.1
           echo "$HOME/micromamba/envs/geo/bin" >> "$GITHUB_PATH"
       - name: Install imposm 0.14.2
         run: |

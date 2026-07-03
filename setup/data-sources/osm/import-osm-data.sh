@@ -687,8 +687,10 @@ setup_script_environment() {
     trap 'signal_handler SIGTERM' TERM
     trap 'cleanup' EXIT
     
-    # Set system limits
-    ulimit -n 1000000
+    # Set system limits (best effort: raising the hard limit is not
+    # permitted in some environments, e.g. CI runners and containers)
+    ulimit -n 1000000 2>/dev/null \
+        || log_warning "Could not raise open-files limit (continuing with $(ulimit -n))"
     
     log_info "Starting OSM data import script (PID: $$)"
     log_info "Configuration: DATA_DIR=$DATA_DIR, CONFIG_FILE=$CONFIG_FILE"
