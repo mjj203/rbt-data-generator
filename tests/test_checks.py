@@ -162,7 +162,10 @@ def test_validate_insufficient_disk_exits_1(
 def test_validate_reports_missing_required_paths(
     fake_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
-    # fake_repo deliberately lacks the imposm/reference-data files.
+    # Remove the imposm files so validate has something to report (fake_repo
+    # ships imposm-config.json for the `rbt osm run` tests).
+    for rel in _REQUIRED_EXTRA_PATHS:
+        (fake_repo / rel).unlink(missing_ok=True)
     monkeypatch.setattr(psycopg, "connect", _connect_ok)
     monkeypatch.setattr(shutil, "which", _which_all)
     monkeypatch.setattr(checks, "_tool_version", lambda tool: "v0.0-test")
