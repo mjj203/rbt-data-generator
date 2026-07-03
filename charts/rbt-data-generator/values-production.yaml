@@ -25,15 +25,11 @@ postgres:
   nodeSelector:
     kubernetes.io/arch: amd64
 
+# Holds tiles, logs, and OSM state (planet PBF + imposm cache + diff state
+# under config.osm*Dir) — a full planet consumes several hundred Gi of that.
 output:
   persistence:
     size: 4Ti
-
-cache:
-  osm:
-    size: 100Gi
-  setup:
-    size: 200Gi
 
 setup:
   enabled: true

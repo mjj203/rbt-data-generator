@@ -32,7 +32,10 @@
         "pgDatabase": { "type": "string" },
         "pgUser": { "type": "string" },
         "maxParallelJobs": { "type": "integer", "minimum": 1 },
-        "logLevel": { "type": "string" }
+        "logLevel": { "type": "string" },
+        "osmDataDir": { "type": "string" },
+        "osmCacheDir": { "type": "string" },
+        "osmDiffDir": { "type": "string" }
       }
     },
     "auth": {
@@ -81,7 +84,6 @@
         }
       }
     },
-    "cache": { "type": "object" },
     "setup": {
       "type": "object",
       "properties": {

@@ -25,12 +25,6 @@ output:
   persistence:
     size: 20Gi
 
-cache:
-  osm:
-    size: 5Gi
-  setup:
-    size: 10Gi
-
 setup:
   enabled: true
   resources:

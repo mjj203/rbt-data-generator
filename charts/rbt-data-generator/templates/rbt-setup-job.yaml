@@ -40,10 +40,6 @@ spec:
           volumeMounts:
             - name: output
               mountPath: /app/output
-            {{- if .Values.cache.setup.enabled }}
-            - name: setup-cache
-              mountPath: /app/cache
-            {{- end }}
           {{- with .Values.setup.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -52,11 +48,6 @@ spec:
         - name: output
           persistentVolumeClaim:
             claimName: {{ include "rbt-data-generator.outputClaimName" . }}
-        {{- if .Values.cache.setup.enabled }}
-        - name: setup-cache
-          persistentVolumeClaim:
-            claimName: {{ include "rbt-data-generator.setupCacheClaimName" . }}
-        {{- end }}
       {{- with .Values.setup.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

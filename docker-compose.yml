@@ -31,6 +31,13 @@ x-rbt-env: &rbt-env
   DATABASE_PASSWORD: ${PG_PASS:-rbt_password}
   MAX_PARALLEL_JOBS: ${MAX_PARALLEL_JOBS:-4}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  # OSM state (planet PBF, imposm cache, replication/diff state) must live on
+  # the shared persistent ./output mount: the code defaults to /mnt/* (ephemeral
+  # container paths), and `rbt osm run` needs the imposm cache produced by
+  # `rbt setup --all`, so both services must see the same directories.
+  OSM_DATA_DIR: ${OSM_DATA_DIR:-/app/output/osm/data}
+  OSM_CACHE_DIR: ${OSM_CACHE_DIR:-/app/output/osm/cache}
+  OSM_DIFF_DIR: ${OSM_DIFF_DIR:-/app/output/osm/diff}
 
 services:
   postgres:
@@ -62,7 +69,6 @@ services:
     environment: *rbt-env
     volumes:
       - ./output:/app/output
-      - setup_cache:/app/cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,7 +84,6 @@ services:
     environment: *rbt-env
     volumes:
       - ./output:/app/output
-      - osm_cache:/app/cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -154,8 +159,6 @@ services:
 
 volumes:
   postgres_data:
-  setup_cache:
-  osm_cache:
   prometheus_data:
 
 networks:

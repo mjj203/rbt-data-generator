@@ -22,7 +22,7 @@ serviceAccount:
 
 # Pod security context applied to the rbt workloads (setup, osm-updates, tiles,
 # smoke). The image runs as the non-root "rbt" user; fsGroup is added as a
-# supplemental group and the RWX output/cache volumes are made group-writable so
+# supplemental group and the RWX output volume is made group-writable so
 # that user can write regardless of its (build-assigned) uid/gid.
 podSecurityContext:
   fsGroup: 1000
@@ -37,6 +37,16 @@ config:
   pgUser: rbt_user
   maxParallelJobs: 4
   logLevel: INFO
+  # OSM state (planet PBF, imposm cache, replication/diff state). Must live
+  # under a persistent mount shared by the setup Job and the osm-updates
+  # Deployment: `rbt osm run` applies diffs against the imposm cache produced
+  # by `rbt setup --all`. Defaults live on the shared output volume — a full
+  # planet needs ~500Gi-1Ti+ of headroom there (see output.persistence.size).
+  # RWX backends (e.g. NFS) can be slow for imposm's LevelDB cache; point
+  # osmCacheDir at faster storage for planet-scale deployments if needed.
+  osmDataDir: /app/output/osm/data
+  osmCacheDir: /app/output/osm/cache
+  osmDiffDir: /app/output/osm/diff
 
 # Database credentials, stored in a Secret.
 auth:
@@ -76,9 +86,11 @@ postgres:
   tolerations: []
   affinity: {}
 
-# Shared output volume (generated tiles + logs), the compose ./output bind
-# mount. Must be ReadWriteMany so setup, osm-updates, tiles, smoke, and the tile
-# server can all mount it.
+# Shared output volume (generated tiles + logs + OSM state under
+# config.osm*Dir), the compose ./output bind mount. Must be ReadWriteMany so
+# setup, osm-updates, tiles, smoke, and the tile server can all mount it. Size
+# for your extract: the default suits regional extracts; a full planet needs
+# ~500Gi-1Ti+ on top of tile output (see values-production.yaml).
 output:
   persistence:
     enabled: true
@@ -86,22 +98,6 @@ output:
     accessModes:
       - ReadWriteMany
     size: 100Gi
-    existingClaim: ""
-
-# Per-workload caches (compose setup_cache / osm_cache named volumes). The osm
-# cache persists imposm diff state across restarts.
-cache:
-  setup:
-    enabled: true
-    storageClassName: ""
-    accessMode: ReadWriteOnce
-    size: 20Gi
-    existingClaim: ""
-  osm:
-    enabled: true
-    storageClassName: ""
-    accessMode: ReadWriteOnce
-    size: 20Gi
     existingClaim: ""
 
 # One-shot database initialization (compose profile: setup).

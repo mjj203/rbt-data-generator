@@ -63,10 +63,6 @@ spec:
           volumeMounts:
             - name: output
               mountPath: /app/output
-            {{- if .Values.cache.osm.enabled }}
-            - name: osm-cache
-              mountPath: /app/cache
-            {{- end }}
           {{- with .Values.production.osmUpdates.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -75,11 +71,6 @@ spec:
         - name: output
           persistentVolumeClaim:
             claimName: {{ include "rbt-data-generator.outputClaimName" . }}
-        {{- if .Values.cache.osm.enabled }}
-        - name: osm-cache
-          persistentVolumeClaim:
-            claimName: {{ include "rbt-data-generator.osmCacheClaimName" . }}
-        {{- end }}
       {{- with .Values.production.osmUpdates.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

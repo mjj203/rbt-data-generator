@@ -152,20 +152,6 @@ Claim name for the shared output volume.
 {{- end }}
 
 {{/*
-Claim name for the setup cache volume.
-*/}}
-{{- define "rbt-data-generator.setupCacheClaimName" -}}
-{{- default (printf "%s-setup-cache" (include "rbt-data-generator.fullname" .)) .Values.cache.setup.existingClaim }}
-{{- end }}
-
-{{/*
-Claim name for the osm cache volume.
-*/}}
-{{- define "rbt-data-generator.osmCacheClaimName" -}}
-{{- default (printf "%s-osm-cache" (include "rbt-data-generator.fullname" .)) .Values.cache.osm.existingClaim }}
-{{- end }}
-
-{{/*
 imagePullSecrets block.
 */}}
 {{- define "rbt-data-generator.imagePullSecrets" -}}

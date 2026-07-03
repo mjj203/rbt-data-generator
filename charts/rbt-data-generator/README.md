@@ -21,8 +21,27 @@ value-driven component toggles.
 - Kubernetes 1.25+ and Helm 3.8+.
 - The rbt image published to a registry (defaults to
   `ghcr.io/mjj203/rbt-data-generator`). Helm does not build images.
-- A **ReadWriteMany** StorageClass for the shared output volume (tiles + logs),
-  which `setup`, `osm-updates`, `tiles`, `smoke`, and `tile-server` all mount.
+- A **ReadWriteMany** StorageClass for the shared output volume (tiles + logs +
+  OSM state), which `setup`, `osm-updates`, `tiles`, `smoke`, and `tile-server`
+  all mount.
+
+## OSM state layout
+
+OSM state — the planet PBF, imposm's LevelDB cache, and replication/diff
+state — lives on the shared output volume under `config.osmDataDir` /
+`config.osmCacheDir` / `config.osmDiffDir` (defaults:
+`/app/output/osm/{data,cache,diff}`). It must stay on a persistent mount
+shared by the setup Job and the osm-updates Deployment: `rbt osm run` applies
+diffs against the imposm cache produced by `rbt setup --all`, and the code's
+built-in `/mnt/*` defaults are ephemeral container paths. Size
+`output.persistence.size` accordingly (a full planet needs ~500Gi–1Ti+ on top
+of tile output), and consider pointing `config.osmCacheDir` at faster storage
+if your RWX backend (e.g. NFS) is slow for LevelDB workloads.
+
+**Upgrading from chart 0.1.x:** the unused `cache.*` values and the
+`-setup-cache` / `-osm-cache` PVCs were removed. This is safe — no workload
+ever wrote to those volumes (they were mounted at `/app/cache`, which nothing
+in the application references); delete any leftover PVCs after upgrading.
 
 ## Quick start
 
@@ -62,7 +81,7 @@ Provide credentials via `auth.existingSecret` (the Secret must contain
 - The image ships an x86-64 imposm3 binary; schedule rbt workloads on amd64
   nodes (`values-production.yaml` sets `nodeSelector: kubernetes.io/arch: amd64`).
 - The rbt image runs as the non-root `rbt` user. `podSecurityContext.fsGroup`
-  makes the RWX output/cache volumes group-writable for it.
+  makes the RWX output volume group-writable for it.
 - Prometheus only scrapes the long-running `osm-updates` Deployment; the tiles
   Job is not a stable scrape target.
 - `files/postgresql.conf` and `files/tile-server.json` mirror the repo-root
