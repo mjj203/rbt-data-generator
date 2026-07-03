@@ -170,7 +170,7 @@ $ rbt osm [OPTIONS] COMMAND [ARGS]...
 * `run`: Start the continuous imposm run loop...
 * `status`: Show whether updates are running and the...
 * `stop`: Stop a running `rbt osm run` supervisor.
-* `import`: Run the OSM data importer.
+* `import`: Run the one-time OSM data importer.
 
 ### `rbt osm run`
 
@@ -217,25 +217,23 @@ $ rbt osm stop [OPTIONS]
 
 ### `rbt osm import`
 
-Run the OSM data importer.
+Run the one-time OSM data importer.
 
 Alias for ``rbt import osm``, kept here too since it reads naturally
-alongside ``run``/``status``/``stop``. Both dispatch the same
-:func:`rbt.importers.osm.import_osm`; prefer ``rbt import osm`` in new
+alongside ``run``/``status``/``stop``; prefer ``rbt import osm`` in new
 scripts for consistency with the other data sources.
 
 **Usage**:
 
 ```console
-$ rbt osm import [OPTIONS] [EXTRA]...
+$ rbt osm import [OPTIONS]
 ```
-
-**Arguments**:
-
-* `[EXTRA]...`: Pass-through arguments to import-osm-data.sh
 
 **Options**:
 
+* `--stage [all|download-planet|download-diffs|merge-diffs|apply-changes|import|import-diff]`: Pipeline stage to run (default: the full download → import workflow).  [default: all]
+* `--start-seq INTEGER`: First replication diff sequence (download-diffs).
+* `--end-seq INTEGER`: Last replication diff sequence (download-diffs).
 * `--dry-run`
 * `--help`: Show this message and exit.
 
@@ -258,7 +256,7 @@ $ rbt setup [OPTIONS] COMMAND [ARGS]...
 * `--import-geonames`
 * `--import-buildings`
 * `--process-schemas`
-* `--osm-arg TEXT`: Stage flag passed through to the OSM import script (repeatable, use the = form: --osm-arg=--import). Defaults to --all.
+* `--osm-stage [all|download-planet|download-diffs|merge-diffs|apply-changes|import|import-diff]`: OSM import stage to run within setup (default: the full workflow).  [default: all]
 * `--dry-run`
 * `--help`: Show this message and exit.
 
@@ -278,76 +276,78 @@ $ rbt import [OPTIONS] COMMAND [ARGS]...
 
 **Commands**:
 
-* `osm`
-* `reference`
-* `geonames`
-* `buildings`
+* `osm`: One-time OSM data import (planet download,...
+* `reference`: Import reference datasets (FieldMaps,...
+* `geonames`: Import NGA GNS + USGS GNIS geographic names.
+* `buildings`: Import Overture Maps buildings from S3.
 
 ### `rbt import osm`
+
+One-time OSM data import (planet download, diffs, imposm import).
 
 **Usage**:
 
 ```console
-$ rbt import osm [OPTIONS] [EXTRA]...
+$ rbt import osm [OPTIONS]
 ```
-
-**Arguments**:
-
-* `[EXTRA]...`
 
 **Options**:
 
+* `--stage [all|download-planet|download-diffs|merge-diffs|apply-changes|import|import-diff]`: Pipeline stage to run (default: the full download → import workflow).  [default: all]
+* `--start-seq INTEGER`: First replication diff sequence (download-diffs).
+* `--end-seq INTEGER`: Last replication diff sequence (download-diffs).
 * `--dry-run`
 * `--help`: Show this message and exit.
 
 ### `rbt import reference`
 
+Import reference datasets (FieldMaps, Natural Earth, OurAirports, OSM water, MIRTA).
+
 **Usage**:
 
 ```console
-$ rbt import reference [OPTIONS] [EXTRA]...
+$ rbt import reference [OPTIONS]
 ```
-
-**Arguments**:
-
-* `[EXTRA]...`
 
 **Options**:
 
+* `--only TEXT`: Import only the named dataset(s) (repeatable; see --list).
+* `--parallel`: Run every dataset in one pool instead of the fieldmaps-first phases.
+* `--list`: List dataset names and exit.
 * `--dry-run`
 * `--help`: Show this message and exit.
 
 ### `rbt import geonames`
 
+Import NGA GNS + USGS GNIS geographic names.
+
 **Usage**:
 
 ```console
-$ rbt import geonames [OPTIONS] [EXTRA]...
+$ rbt import geonames [OPTIONS]
 ```
-
-**Arguments**:
-
-* `[EXTRA]...`
 
 **Options**:
 
+* `--only TEXT`: Import only the named dataset(s) (repeatable; see --list).
+* `--list`: List dataset names and exit.
 * `--dry-run`
 * `--help`: Show this message and exit.
 
 ### `rbt import buildings`
 
+Import Overture Maps buildings from S3.
+
 **Usage**:
 
 ```console
-$ rbt import buildings [OPTIONS] [EXTRA]...
+$ rbt import buildings [OPTIONS]
 ```
-
-**Arguments**:
-
-* `[EXTRA]...`
 
 **Options**:
 
+* `--skip-parts`: Skip the optional building_part ingest.
+* `--release TEXT`: Overture release to sync (default: pinned in Settings).
 * `--dry-run`
 * `--help`: Show this message and exit.
 

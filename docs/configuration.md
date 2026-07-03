@@ -6,107 +6,125 @@ RBT Vector Tiles uses a centralized configuration file (`config/rbt.conf`) as th
 
 1. Environment variables exported at the shell (or passed via `docker-compose`).
 2. Values in [`config/rbt.conf`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/rbt.conf).
-3. Built-in defaults — the `Settings` dataclass fields in `src/rbt/config.py` for the Python CLI; defensive fallbacks in `scripts/lib/config.sh` for the bash leaf scripts.
+3. Built-in defaults — the `Settings` dataclass fields in `src/rbt/config.py`.
+
+Since the importer port, the CLI is the only consumer of `rbt.conf`: every variable below is resolved by `load_settings()` in [`src/rbt/config.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/src/rbt/config.py) (or is unused).
 
 ## Variable ownership
 
-Every table below has an **Owner** column, verified against the actual consumers (not just where a variable is declared in `rbt.conf`):
+Every table below has an **Owner** column:
 
 | Owner | Meaning |
 |---|---|
-| **Python** | Read by `load_settings()` in [`src/rbt/config.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/src/rbt/config.py) only. The bash leaf scripts never see it, even indirectly. |
-| **Bash** | Read only by the bash leaf scripts under `setup/data-sources/` (directly, or via `scripts/lib/config.sh`/`logging.sh`) or the deprecated `production/` generators. The Python CLI never reads it. |
-| **Shared** | Read by both: either the same name resolves in `Settings` *and* in a bash script, or Python passes it to child processes via `Settings.subprocess_env()`. |
+| **Python** | Read by `load_settings()` in [`src/rbt/config.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/src/rbt/config.py) and consumed by the CLI. Keys marked *(previously bash-only)* were read only by the retired bash importers before the native port. |
 | **Unused** | Declared in `rbt.conf` but not read by anything in this repository today — likely a holdover from a retired script. Kept for backward compatibility with external tooling; safe to ignore. |
 
 ### General processing
 
 | Variable | Owner | Default | Purpose |
 |---|---|---|---|
-| `MAX_PARALLEL_JOBS` | Python | `4` | Reported by `rbt validate`; not yet wired to real parallelism (see [Performance](performance.md)). Distinct from `SCRIPT_MAX_PARALLEL_JOBS` below. |
-| `RETRY_COUNT` | Python | `3` | Retry attempts for `rbt.process.run_with_retry`. |
-| `RETRY_DELAY` | Shared | `30` (Python) / `10` (bash) | Python retry backoff seconds, default `30` (`config.py`). `import-osm-data.sh` also falls back to this name but with its own unsourced default of `10` (the other three importers use `SCRIPT_RETRY_DELAY` instead — a pre-existing inconsistency, not a typo). |
+| `MAX_PARALLEL_JOBS` | Python | `4` | Worker count for the importers' parallel ingest pools (`rbt.importers._support.run_jobs`); also reported by `rbt validate`. |
+| `RETRY_COUNT` | Python | `3` | Retry attempts per external command (`rbt.process.run_with_retry`) and per importer job. |
+| `RETRY_DELAY` | Python | `30` | Seconds between retry attempts. |
 | `LOG_LEVEL` | Python | `INFO` | `DEBUG`, `INFO`, `WARN`, `ERROR`. |
-| `DEBUG` | Shared | `false` | Canonical name resolved first by `Settings.debug`; `SCRIPT_DEBUG` (below) is the fallback alias. |
-| `VERBOSE` | Shared | `false` | Canonical name resolved first by `Settings.verbose`; `SCRIPT_VERBOSE` (below) is the fallback alias. |
-| `CLEAN_TEMP_FILES` | Unused | `true` | Declared in `rbt.conf` but shadowed: `import-buildings.sh`/`import-geonames.sh`/`import-reference-data.sh` each read a local `CLEAN_TEMP_FILES` seeded from `SCRIPT_CLEAN_TEMP_FILES` (default `false`) instead of this key. |
-| `PARALLEL_INGESTION` | Unused | `false` | Same shadowing pattern — the importers read `SCRIPT_PARALLEL_INGESTION` into a local `PARALLEL_INGESTION`, ignoring this top-level key. |
-| `VALIDATE_DOWNLOADS` | Bash | `true` | Root-level fallback consumed by `import-osm-data.sh` only when `OSM_VALIDATE_DOWNLOADS` is unset (see OSM import section). |
+| `DEBUG` | Python | `false` | Canonical name resolved first by `Settings.debug`; `SCRIPT_DEBUG` (below) is the fallback alias. |
+| `VERBOSE` | Python | `false` | Canonical name resolved first by `Settings.verbose`; `SCRIPT_VERBOSE` (below) is the fallback alias. |
+| `CLEAN_TEMP_FILES` | Python | `false` (code) / `true` (rbt.conf) | Loaded into `Settings.clean_temp_files`. Reserved for importer temp-file cleanup — the native importers currently keep downloaded artifacts on disk so re-runs can resume. (Previously shadowed by the retired `SCRIPT_CLEAN_TEMP_FILES`.) |
+| `PARALLEL_INGESTION` | Unused | `false` | Superseded by the `rbt import reference --parallel` flag; no longer read from the environment. |
+| `VALIDATE_DOWNLOADS` | Python | `true` | Fallback alias for `OSM_VALIDATE_DOWNLOADS` (see OSM import section). |
 
 ### Tile generation
 
 | Variable | Owner | Default | Purpose |
 |---|---|---|---|
-| `TILE_CACHE_DIR` | Shared | `./output/tiles` | Where MBTiles/PBF tiles are written. Read by the tile engine. |
-| `TILE_TEMP_DIR` | Shared | `/tmp/tiles` | Scratch space for `tippecanoe -t`. Keep on fast storage. |
-| `TILE_MAX_ZOOM` | Shared | `13` | Maximum zoom level. |
-| `TILE_MIN_ZOOM` | Shared | `0` | Minimum zoom level. |
-| `SUPPORTED_PROJECTIONS` | Bash | `"3857 3395 4326"` | Read-only; the Python CLI derives supported projections from `config/layers.yml` instead. |
+| `TILE_CACHE_DIR` | Python | `./output/tiles` | Where MBTiles/PBF tiles are written. Read by the tile engine. |
+| `TILE_TEMP_DIR` | Python | `/tmp/tiles` | Scratch space for `tippecanoe -t`. Keep on fast storage. |
+| `TILE_MAX_ZOOM` | Python | `13` | Maximum zoom level. |
+| `TILE_MIN_ZOOM` | Python | `0` | Minimum zoom level. |
+| `SUPPORTED_PROJECTIONS` | Unused | `"3857 3395 4326"` | The CLI derives supported projections from `config/layers.yml` instead. |
 | `DEFAULT_PROJECTION` | Unused | `3857` | Loaded into `Settings.default_projection` but not read by `rbt tiles` or `rbt tiles layer` — Typer supplies its own defaults (`--projection all` and `--projection 3857` respectively) regardless of this value. Kept for backwards compatibility with existing rbt.conf files. |
-| `LAYER_TYPES` | Bash | `"physical cultural"` | Read-only; the Python CLI hardcodes the same two types. |
+| `LAYER_TYPES` | Unused | `"physical cultural"` | The CLI hardcodes the same two types. |
 
 ### Database connection
 
 | Variable | Owner | Legacy | Default | Purpose |
 |---|---|---|---|---|
-| `DATABASE_HOST` | Shared | `PG_HOST` | `localhost` | PostgreSQL host. |
-| `DATABASE_PORT` | Shared | `PG_PORT` | `5432` | PostgreSQL port. |
-| `DATABASE_NAME` | Shared | `PG_DATABASE` | `rbt` | Database name. |
-| `DATABASE_USER` | Shared | `PG_USR` | `postgres` | Database user. |
-| `DATABASE_PASSWORD` | Shared | `PG_PASS` | *(unset)* | Database password. |
+| `DATABASE_HOST` | Python | `PG_HOST` | `localhost` | PostgreSQL host. |
+| `DATABASE_PORT` | Python | `PG_PORT` | `5432` | PostgreSQL port. |
+| `DATABASE_NAME` | Python | `PG_DATABASE` | `rbt` | Database name. |
+| `DATABASE_USER` | Python | `PG_USR` | `postgres` | Database user. |
+| `DATABASE_PASSWORD` | Python | `PG_PASS` | *(unset)* | Database password. |
 
-These five are resolved independently by both sides using identical rules (`Settings` in Python, `rbt_config_load` in `scripts/lib/config.sh`) — see [Project Tour](project-structure.md#configuration-resolution) for why. Python also bundles them into a `PG*`/`PG_*`/`DATABASE_*` environment for every child process it spawns (`Settings.subprocess_env()`).
+Python bundles these into a `PG*`/`PG_*`/`DATABASE_*` environment for every child process it spawns (`Settings.subprocess_env()`), so psql, ogr2ogr, and imposm all see the same resolved connection. Passwords travel via `PGPASSWORD` (never argv) for libpq consumers; imposm's `postgis://` URL embeds them, and `rbt.process` redacts URL userinfo before logging.
 
 ### Database performance tuning
 
 | Variable | Owner | Default | Purpose |
 |---|---|---|---|
-| `DATABASE_WORK_MEM` | Bash | `32GB` | Session `work_mem` (ok to lower for small boxes). Ops/docs reference only — not read by any script. |
-| `DATABASE_MAINTENANCE_WORK_MEM` | Bash | `64GB` | `maintenance_work_mem` during index builds. Ops/docs reference only. |
-| `DATABASE_MAX_PARALLEL_WORKERS` | Bash | `8` | Matches `max_parallel_workers_per_gather`. Ops/docs reference only. |
-| `DATABASE_EFFECTIVE_CACHE_SIZE` | Bash | `192GB` | Planner hint; set to ~75% of system RAM. Ops/docs reference only. |
-| `DATABASE_MAX_CONNECTIONS` | Bash | `100` | Used by docs/ops only; set on the server. |
-| `DATABASE_CONNECTION_TIMEOUT` | Bash | `300` | Client-side psql timeout seconds. Ops/docs reference only. |
+| `DATABASE_WORK_MEM` | Unused | `32GB` | Session `work_mem` (ok to lower for small boxes). Ops/docs reference only — not read by any code. |
+| `DATABASE_MAINTENANCE_WORK_MEM` | Unused | `64GB` | `maintenance_work_mem` during index builds. Ops/docs reference only. |
+| `DATABASE_MAX_PARALLEL_WORKERS` | Unused | `8` | Matches `max_parallel_workers_per_gather`. Ops/docs reference only. |
+| `DATABASE_EFFECTIVE_CACHE_SIZE` | Unused | `192GB` | Planner hint; set to ~75% of system RAM. Ops/docs reference only. |
+| `DATABASE_MAX_CONNECTIONS` | Unused | `100` | Used by docs/ops only; set on the server. |
+| `DATABASE_CONNECTION_TIMEOUT` | Unused | `300` | Ops/docs reference only — connection timeouts are fixed in code (psycopg `connect_timeout`). |
 | `DATABASE_EXTENSIONS` | Python | `"postgis postgis_raster hstore pg_trgm"` | Created during `rbt setup`; checked by `rbt validate`. |
 | `DATABASE_SCHEMAS` | Python | `"fieldmap mirta naturalearth ourairports rbt geonames overture"` | Expected schemas after setup; checked by `rbt validate`. |
 
 ### OSM import
 
-| Variable | Owner | Default | Purpose |
-|---|---|---|---|
-| `OSM_LOG_FILE` | Bash | `${SHARED_LOG_DIR:-./output/logs}/osm_import.log` | Per-run OSM log. Falls back to `./output/logs/...` when `SHARED_LOG_DIR` is unset (only `./setup/.../logs/osm_import.log` if the script runs without sourcing `rbt.conf` at all). |
-| `OSM_DATA_DIR` | Bash | `/mnt/data` | Planet PBF + diffs landing zone. |
-| `OSM_CONFIG_FILE` | Shared | `./setup/data-sources/osm/imposm-config.json` | imposm3 config; read by `Settings.osm_config_file` (Python's `rbt osm run` supervisor) and by `import-osm-data.sh` as a fallback default. |
-| `OSM_MAPPING_FILE` | Bash | `./setup/data-sources/osm/imposm-mapping.yaml` | imposm3 mapping. |
-| `OSM_CACHE_DIR` | Bash | `/mnt/cache` | imposm3 cache directory. |
-| `OSM_DIFF_DIR` | Bash | `/mnt/diff` | Downloaded OSC diffs. |
-| `OSM_CONNECTION` | Bash | derived from `DATABASE_*` | imposm3 connection string, built from the resolved `DATABASE_USER`/`DATABASE_PASSWORD`/`DATABASE_HOST`/`DATABASE_PORT`/`DATABASE_NAME` so imposm targets the same database as the rest of the CLI. Only falls back to the hardcoded `postgis://postgres:postgres@localhost/rbt?prefix=NONE` if the script runs without sourcing `rbt.conf`. |
-| `OSM_SRID` | Bash | `3857` | SRID of imposm3-imported tables. |
-| `ARIA2C_MAX_DOWNLOADS` | Bash | `12` | Concurrent aria2c downloads. |
-| `ARIA2C_MAX_CONNECTIONS` | Bash | `16` | Connections per aria2c download. |
-| `ARIA2C_SPLITS` | Bash | `9` | aria2c `--split`. |
-| `WGET_PARALLEL_JOBS` | Bash | `8` | Fallback parallelism when wget is used. |
-| `DIFF_START_SEQ` | Bash | `713` | Starting diff sequence for bulk backfill. |
-| `DIFF_END_SEQ` | Bash | `730` | Ending diff sequence for bulk backfill. |
-| `OSM_CLEANUP_ON_EXIT` | Bash | `true` | Remove temp files on exit. |
-| `OSM_VALIDATE_DOWNLOADS` | Bash | `true` | Size-check downloaded files. |
-| `OSM_MIN_PBF_SIZE_MB` | Bash | `50000` | Minimum acceptable PBF size in MB for `OSM_VALIDATE_DOWNLOADS`'s sanity check. Planet-sized floor by default so a truncated planet download is caught; lower it (e.g. `10`) when importing a small regional extract. |
-| `OSM_HEALTH_CHECK_PORT` | Unused | `8080` | Referenced only in a no-op log message in `import-osm-data.sh` (`start_health_check_server`); not functionally used. `rbt health` (the Docker `HEALTHCHECK`) takes no port argument. |
-
-### Shared script settings
+All of these are now read by `Settings`; the ones marked *(previously bash-only)* were consumed only by the retired `import-osm-data` bash script before the native port.
 
 | Variable | Owner | Default | Purpose |
 |---|---|---|---|
-| `SHARED_LOG_DIR` | Shared | `./output/logs` | Read by `Settings.shared_log_dir` and directly by the bash importers/`scripts/lib/logging.sh`. |
-| `SHARED_TEMP_DIR` | Shared | `./output/temp` | Read by `Settings.shared_temp_dir` and directly by the bash importers. |
-| `SCRIPT_MAX_PARALLEL_JOBS` | Bash | `4` | Importer job pool size (distinct from Python's `MAX_PARALLEL_JOBS` above). |
-| `SCRIPT_RETRY_COUNT` | Bash | `3` | Retries for importer sub-steps. |
-| `SCRIPT_RETRY_DELAY` | Bash | `30` | Retry delay seconds (three of the four importers; `import-osm-data.sh` uses bare `RETRY_DELAY` instead — see above). |
-| `SCRIPT_CONNECTION_TIMEOUT` | Bash | `300` | psql connection timeout. |
-| `SCRIPT_PARALLEL_INGESTION` | Bash | `false` | Toggle full parallel ingestion. |
-| `SCRIPT_DEBUG` | Shared | `false` | Also accepted by Python as a fallback for `DEBUG` (`Settings.debug`). |
-| `SCRIPT_VERBOSE` | Shared | `false` | Also accepted by Python as a fallback for `VERBOSE` (`Settings.verbose`). |
-| `SCRIPT_CLEAN_TEMP_FILES` | Bash | `false` | Keep temp files for postmortem. |
+| `OSM_DATA_DIR` | Python *(previously bash-only)* | `/mnt/data` | Planet PBF + diffs landing zone. |
+| `OSM_CONFIG_FILE` | Python | `./setup/data-sources/osm/imposm-config.json` | imposm3 config; used by the import stages and the `rbt osm run` supervisor. |
+| `OSM_MAPPING_FILE` | Python *(previously bash-only)* | `./setup/data-sources/osm/imposm-mapping.yaml` | imposm3 mapping. |
+| `OSM_CACHE_DIR` | Python *(previously bash-only)* | `/mnt/cache` | imposm3 cache directory. |
+| `OSM_DIFF_DIR` | Python *(previously bash-only)* | `/mnt/diff` | imposm3 diff state directory. |
+| `OSM_CONNECTION` | Python *(previously bash-only)* | derived from `DATABASE_*` | Override for imposm3's `postgis://` connection URL. When unset, `Settings.imposm_connection()` derives it from the resolved `DATABASE_*` values, so imposm targets the same database as the rest of the CLI. |
+| `OSM_SRID` | Python *(previously bash-only)* | `4326` | SRID of imposm3-imported tables. 4326 on purpose — the `rbt.*` schema SQL casts imposm geometry to `::geometry(..., 4326)`. |
+| `ARIA2C_MAX_DOWNLOADS` | Python *(previously bash-only)* | `12` | Concurrent aria2c downloads. |
+| `ARIA2C_MAX_CONNECTIONS` | Python *(previously bash-only)* | `16` | Connections per aria2c download. |
+| `ARIA2C_SPLITS` | Python *(previously bash-only)* | `9` | aria2c `--split`. |
+| `WGET_PARALLEL_JOBS` | Python *(previously bash-only)* | `8` | Worker count for the generic single-URL download pool (OSM replication diffs, GeoNames zips). The name is kept for compatibility with the retired wget-based importer; downloads now use the Python stdlib. |
+| `DIFF_START_SEQ` | Python *(previously bash-only)* | `713` | Default diff start sequence; `rbt import osm --start-seq` overrides per run. |
+| `DIFF_END_SEQ` | Python *(previously bash-only)* | `730` | Default diff end sequence; `rbt import osm --end-seq` overrides per run. |
+| `OSM_CLEANUP_ON_EXIT` | Python *(previously bash-only)* | `true` | Remove the merged/updated intermediates (`osm.osc.gz`, `planet.osm.pbf`) after a **successful** `--stage all` run. Single-stage runs never delete their outputs. `CLEANUP_ON_EXIT` is accepted as a fallback alias. |
+| `OSM_VALIDATE_DOWNLOADS` | Python *(previously bash-only)* | `true` | Size-check downloaded/produced files. `VALIDATE_DOWNLOADS` is accepted as a fallback alias. |
+| `OSM_MIN_PBF_SIZE_MB` | Python *(previously bash-only)* | `50000` | Minimum acceptable PBF size in MB for the sanity check. Planet-sized floor by default so a truncated planet download is caught; lower it (e.g. `10`) when importing a small regional extract. |
+| `OSM_LOG_FILE` | Unused | `${SHARED_LOG_DIR}/osm_import.log` | The native importer writes per-stage logs (`osm_<stage>_<timestamp>.log`) under `SHARED_LOG_DIR` instead of a single file. |
+| `OSM_HEALTH_CHECK_PORT` | Unused | `8080` | Nothing reads it since the bash importer's no-op health-check hook was retired. `rbt health` (the Docker `HEALTHCHECK`) takes no port argument. |
+
+### Overture buildings import
+
+| Variable | Owner | Default | Purpose |
+|---|---|---|---|
+| `OVERTURE_RELEASE` | Python *(new)* | `2026-06-17.0` | Overture Maps release synced by `rbt import buildings` (override per run with `--release`). Keep in sync with `tools/duckdb-building-export.sql`; Overture retains only a rolling window of releases on the public bucket. |
+| `OVERTURE_S3_BUCKET` | Python *(new)* | `s3://overturemaps-us-west-2/` | Public Overture S3 bucket (synced with `aws s3 sync --no-sign-request`). |
+
+### Shared settings
+
+| Variable | Owner | Default | Purpose |
+|---|---|---|---|
+| `SHARED_LOG_DIR` | Python | `./output/logs` | Per-invocation CLI logs, per-job importer logs, and schema logs. |
+| `SHARED_TEMP_DIR` | Python | `./output/temp` | Importer scratch space (downloads, extracted archives) + `imposm-run.pid`. |
+| `SCRIPT_DEBUG` | Python | `false` | Accepted as a fallback alias for `DEBUG` (`Settings.debug`). |
+| `SCRIPT_VERBOSE` | Python | `false` | Accepted as a fallback alias for `VERBOSE` (`Settings.verbose`). |
+
+### Retired `SCRIPT_*` aliases
+
+The bash importers read a parallel family of `SCRIPT_*`-prefixed variables. Those importers are gone, and with them the aliases — the unprefixed names are now the only spellings. If you carry an old `rbt.conf` or `.env`, migrate as follows:
+
+| Retired alias | Replacement |
+|---|---|
+| `SCRIPT_MAX_PARALLEL_JOBS` | `MAX_PARALLEL_JOBS` |
+| `SCRIPT_RETRY_COUNT` | `RETRY_COUNT` |
+| `SCRIPT_RETRY_DELAY` | `RETRY_DELAY` |
+| `SCRIPT_CLEAN_TEMP_FILES` | `CLEAN_TEMP_FILES` |
+| `SCRIPT_CONNECTION_TIMEOUT` | *(none — connection timeouts are fixed in code)* |
+| `SCRIPT_PARALLEL_INGESTION` | *(none — use the `rbt import reference --parallel` flag)* |
+
+`SCRIPT_DEBUG` and `SCRIPT_VERBOSE` are the exception: they remain accepted as fallback aliases of `DEBUG`/`VERBOSE`.
 
 ### Resource limits
 
@@ -114,7 +132,7 @@ These five are resolved independently by both sides using identical rules (`Sett
 |---|---|---|---|
 | `DISK_SPACE_REQUIRED_GB` | Python | `100` | `rbt validate` pre-flight check minimum. |
 | `MEMORY_REQUIRED_GB` | Python | `16` | `rbt validate` pre-flight check minimum. |
-| `HEALTH_CHECK_PORT` | Unused | `8080` | Referenced only in a no-op log message in `import-osm-data.sh` (as a fallback for `OSM_HEALTH_CHECK_PORT`); not functionally used. `rbt health` takes no port argument. |
+| `HEALTH_CHECK_PORT` | Unused | `8080` | Not read anywhere; `rbt health` takes no port argument. |
 | `HEALTH_CHECK_INTERVAL` | Unused | `30` | Not read anywhere; the Docker `HEALTHCHECK interval` is set in `Dockerfile.production` instead. |
 
 ## Layer registry validation
@@ -147,12 +165,7 @@ section first
 
 ## Backward compatibility
 
-The legacy `PG_HOST`/`PG_PORT`/`PG_USR`/`PG_PASS`/`PG_DATABASE` variables remain recognized. `scripts/lib/config.sh` resolves them once at script start so that individual scripts only need to source the shared config helper:
-
-```bash
-source "${PROJECT_ROOT}/scripts/lib/config.sh"
-rbt_config_load   # sets DATABASE_* + exports PG_* for legacy tools
-```
+The legacy `PG_HOST`/`PG_PORT`/`PG_USR`/`PG_PASS`/`PG_DATABASE` variables remain recognized: `load_settings()` resolves each `DATABASE_*` key from its legacy `PG_*` alias when the canonical name is unset.
 
 ## Verifying your configuration
 

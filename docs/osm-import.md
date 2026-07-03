@@ -6,12 +6,11 @@ This page documents the import and continuous maintenance of OpenStreetMap
 (OSM) data in the PostGIS database using Imposm3. There are two entry points:
 
 - **`rbt import osm`** — one-time planet import (download → diff merge →
-  imposm import), delegating to the Bash leaf script
-  `setup/data-sources/osm/import-osm-data.sh` (see its `CONTRACT` header).
-  Also runs as part of `rbt setup --all`.
+  imposm import), implemented natively in `src/rbt/importers/osm.py`.
+  Also runs as part of `rbt setup --all` (stage selectable via
+  `--osm-stage`).
 - **`rbt osm run`** — continuous daily updates. The CLI natively supervises
-  `imposm run` (no bash involved); `rbt osm status` and `rbt osm stop` manage
-  the supervisor.
+  `imposm run`; `rbt osm status` and `rbt osm stop` manage the supervisor.
 
 ## Table of Contents
 
@@ -21,7 +20,7 @@ This page documents the import and continuous maintenance of OpenStreetMap
 4. [Configuration Files](#configuration-files)
 5. [Database Schema](#database-schema)
 6. [Processing Workflow](#processing-workflow)
-7. [Script Features](#script-features)
+7. [Importer Features](#importer-features)
 8. [Monitoring and Health Checks](#monitoring-and-health-checks)
 
 ## Architecture
@@ -45,14 +44,13 @@ flowchart LR
 === "rbt CLI"
 
     ```bash
-    # A stage flag is required — the leaf script exits with an error if none
-    # is given. Full workflow: download planet, diffs, merge, apply, import
-    rbt import osm -- --all
+    # Full workflow (the default): download planet, diffs, merge, apply, import
+    rbt import osm
 
-    # Or pass a narrower stage flag through to the leaf script (after `--`)
-    rbt import osm -- --download-planet
-    rbt import osm -- --download-diffs 713 730
-    rbt import osm -- --import
+    # Or run a single stage with the typed --stage option
+    rbt import osm --stage download-planet
+    rbt import osm --stage download-diffs --start-seq 713 --end-seq 730
+    rbt import osm --stage import
 
     # Preview without executing
     rbt import osm --dry-run
@@ -60,6 +58,28 @@ flowchart LR
 
     `rbt osm import` is an alias for the same command (kept for symmetry with
     `rbt osm run|status|stop`); prefer `rbt import osm` in new scripts.
+
+    The stages:
+
+    | `--stage` | What it does |
+    |---|---|
+    | `all` *(default)* | Runs `download-planet` → `download-diffs` → `merge-diffs` → `apply-changes` → `import` in sequence, then removes the intermediate files (`osm.osc.gz`, `planet.osm.pbf`) if `OSM_CLEANUP_ON_EXIT=true`. |
+    | `download-planet` | aria2c races `planet-latest-v2.osm.pbf` across nine mirrors; skipped if a valid planet file already exists. |
+    | `download-diffs` | Downloads daily replication diffs `NNN.osc.gz` for the sequence range (`--start-seq`/`--end-seq`, defaults `DIFF_START_SEQ`/`DIFF_END_SEQ`) in parallel; existing valid diffs are skipped. |
+    | `merge-diffs` | `osmium merge-changes` consolidates the numeric `NNN.osc.gz` files into one `osm.osc.gz` (sorted numerically, so sequence 1000 follows 999). |
+    | `apply-changes` | `osmosis` applies `osm.osc.gz` to `planet-latest-v2.osm.pbf`, producing the updated `planet.osm.pbf`. |
+    | `import` | `imposm import` loads `planet.osm.pbf` into PostGIS with the project mapping, recording diff state for later replication. |
+    | `import-diff` | `imposm diff` applies downloaded `NNN.osc.gz` changesets to the database as a one-time update. |
+
+    !!! note "Two deliberate behavior changes from the retired bash importer"
+        1. **`--stage all` no longer ends by starting `imposm run`.** The
+           import pipeline finishes and returns; continuous replication is
+           owned by `rbt osm run` and must be started separately.
+        2. **Single-stage runs no longer delete their outputs.** The bash
+           script's EXIT trap removed `osm.osc.gz`/`planet.osm.pbf` even when
+           a lone `--merge-diffs` or `--apply-changes` invocation had just
+           produced them; cleanup now happens only after a *successful*
+           `--stage all` run (and only when `OSM_CLEANUP_ON_EXIT=true`).
 
 === "Docker Compose"
 
@@ -116,7 +136,7 @@ flowchart LR
 - `--max-concurrent-downloads=12`: Up to 12 concurrent file downloads
 - `--file-allocation=falloc`: Pre-allocates disk space for better performance
 
-The script uses multiple mirror servers for redundancy:
+The importer uses multiple mirror servers for redundancy:
 
 - ftp.spline.de
 - ftp5.gwdg.de
@@ -170,7 +190,7 @@ osmosis --read-xml-change file="osm.osc.gz" \
 - Generalization support for multi-scale rendering
 - Continuous replication support
 
-**Commands Used** (the first by `rbt import osm` via the leaf script, the
+**Commands Used** (the first by `rbt import osm --stage import`, the
 second supervised directly by `rbt osm run`):
 
 ```bash
@@ -189,7 +209,7 @@ imposm run -config config.json
 
 - Host: value of `DATABASE_HOST` (e.g. `localhost`, or the `postgres` Compose service)
 - Database: rbt
-- SRID: 3857 (Web Mercator — set by `OSM_SRID`, the SRID imposm3 stores geometries in)
+- SRID: 4326 (set by `OSM_SRID`, the SRID imposm3 stores geometries in — the `rbt.*` schema SQL expects 4326)
 - No table prefix (prefix=NONE)
 
 ## Configuration Files
@@ -214,7 +234,7 @@ the same setting)
 - `replication_interval`: Updates every 24 hours  
 - `diff_state_before`: Buffer time before current state (24 hours)
 
-Note: Additional configuration such as database connection, mapping file, and cache directories are provided via command-line arguments or environment variables in the `import-osm-data.sh` script rather than in this configuration file.
+Note: Additional configuration such as the database connection, mapping file, and cache directories is passed to imposm as command-line arguments built from `Settings` (`OSM_CONNECTION`, `OSM_MAPPING_FILE`, `OSM_CACHE_DIR`, `OSM_DIFF_DIR`, `OSM_SRID`) rather than living in this configuration file.
 
 ### imposm-mapping.yaml
 
@@ -401,12 +421,10 @@ The mapping creates 30+ specialized tables, each optimized for specific geograph
 
 ## Processing Workflow
 
-### 1. **Initialization**
+### 1. **Pre-flight** (`rbt validate`)
 
-- Validates dependencies (aria2c, wget, osmium, osmosis, imposm)
-- Sets up logging infrastructure
-- Validates configuration files
-- Checks disk space (requires ~70GB)
+- Verifies the external tools (aria2c, osmium, osmosis, imposm) are on PATH
+- Verifies configuration, database connectivity, disk space, and memory
 
 ### 2. **Planet File Download**
 
@@ -418,7 +436,8 @@ The mapping creates 30+ specialized tables, each optimized for specific geograph
 ### 3. **Diff File Processing**
 
 - Downloads daily diff files (sequences 713-730 by default)
-- Parallel download using wget (8 concurrent jobs)
+- Parallel stdlib downloads (`WGET_PARALLEL_JOBS` workers, default 8 — the
+  name is kept from the retired wget-based importer)
 - Merges all diffs using osmium merge-changes
 - Creates single consolidated changeset
 
@@ -442,47 +461,50 @@ The mapping creates 30+ specialized tables, each optimized for specific geograph
 - SIGTERM/SIGINT are forwarded to imposm with a 30-second grace period
 - Pidfile at `$SHARED_TEMP_DIR/imposm-run.pid` prevents double-starting
 
-## Script Features
+## Importer Features
 
-These apply to the `import-osm-data.sh` leaf script behind `rbt import osm`:
+These apply to the native importer (`src/rbt/importers/osm.py`) behind
+`rbt import osm`:
 
 ### Error Handling
 
-- Comprehensive error checking at each stage
-- Retry logic with configurable attempts (default: 3)
-- Graceful shutdown on signals (SIGINT, SIGTERM)
-- Cleanup of temporary files on exit
+- Comprehensive validation at each stage (missing/undersized inputs fail fast)
+- Retry logic with configurable attempts (`RETRY_COUNT`, default 3)
+- Failed parallel downloads are collected and reported together
+- Intermediate files are cleaned up only after a successful full run
 
 ### Performance Optimization
 
 - Parallel downloads for faster data retrieval
 - Batch processing of diff files
-- File validation to avoid re-downloads
-- Configurable resource limits
+- File validation to avoid re-downloads (existing valid files are skipped)
+- Configurable pool sizes and retry behavior
 
 ### Monitoring
 
-- Detailed logging with timestamps
-- Progress tracking for long operations
-- `start_health_check_server` logs the configured port but is currently a
-  no-op (no HTTP listener) — the container orchestrator (Docker
-  `HEALTHCHECK`, Kubernetes probes) owns liveness checking instead
-- PID file for process management
+- Per-stage log files under `$SHARED_LOG_DIR`
+  (`osm_<stage>_<timestamp>.log`)
+- Progress output from aria2c/imposm streamed into those logs
+- Liveness checking is owned by the container orchestrator (Docker
+  `HEALTHCHECK` runs `rbt health`, Kubernetes probes)
 
 ### Configuration Options
 
 Set in `config/rbt.conf` (the `OSM_*` section) or override via environment:
 
 ```bash
-OSM_LOG_FILE        # Log file location
 OSM_DATA_DIR        # Data storage directory (default: /mnt/data)
 OSM_CONFIG_FILE     # Imposm config file
 OSM_MAPPING_FILE    # Imposm mapping file
 OSM_CACHE_DIR       # Imposm cache directory
-OSM_DIFF_DIR        # Downloaded OSC diffs
+OSM_DIFF_DIR        # Imposm diff state directory
+OSM_CONNECTION      # imposm connection URL override (default: derived from DATABASE_*)
+OSM_SRID            # SRID imposm stores geometries in (default: 4326)
+ARIA2C_MAX_DOWNLOADS / ARIA2C_MAX_CONNECTIONS / ARIA2C_SPLITS  # aria2c tuning
+WGET_PARALLEL_JOBS  # Parallel diff-download pool size (name kept for compatibility)
 DIFF_START_SEQ      # Default diff start sequence (713)
 DIFF_END_SEQ        # Default diff end sequence (730)
-OSM_CLEANUP_ON_EXIT # Remove temp files (default: true)
+OSM_CLEANUP_ON_EXIT # Remove intermediates after a successful full run (default: true)
 OSM_VALIDATE_DOWNLOADS # Validate file integrity (default: true)
 OSM_MIN_PBF_SIZE_MB # Minimum PBF size in MB for the import-stage size check
                      # (default: 50000 — a planet-sized floor; lower it, e.g.
@@ -503,25 +525,22 @@ Reports whether the supervisor is running (via its pidfile) and queries
 `imposm3_log` for the last applied OSM change. Exits non-zero when updates
 are not running, so it slots directly into monitoring scripts.
 
-### Health Check Endpoint
+### Health Checks
 
-During a one-time import, the leaf script's `start_health_check_server` hook
-only logs the configured port (`OSM_HEALTH_CHECK_PORT`, default 8080) — it
-does not open an HTTP listener. Container orchestration (Kubernetes, Docker
-Swarm) and load balancers should not point at this port for liveness.
-
-For the running system, `rbt health` (the Docker HEALTHCHECK command)
-verifies a database round-trip; use it (or `rbt osm status`) for real health
-signals instead.
+`rbt health` (the Docker HEALTHCHECK command) verifies a database
+round-trip; use it (or `rbt osm status`) for real health signals. The
+one-time import exposes no HTTP health endpoint of its own.
 
 ### Log Analysis
 
-Monitor the log file (default `output/logs/osm_import.log`) for:
+Each import stage writes its own log under `$SHARED_LOG_DIR` (default
+`output/logs/`) as `osm_<stage>_<timestamp>.log` — e.g.
+`osm_download_planet_*.log`, `osm_merge_diffs_*.log`, `osm_import_*.log`.
+Monitor them (plus the per-invocation CLI log `rbt_<timestamp>.log`) for:
 
-- Progress indicators: `[INFO] Progress: <task> [current/total] (percent%)`
-- Errors: `[ERROR]` prefixed messages
-- Warnings: `[WARN]` prefixed messages
-- Timing: Duration reports for each major operation
+- Progress output from aria2c, osmium, osmosis, and imposm
+- Errors and retry warnings (each retry attempt is logged with its delay)
+- The failed-job summary emitted at the end of a run
 
 `rbt osm run` streams imposm output into its own log
 (`output/logs/rbt_<timestamp>.log` by default).

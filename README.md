@@ -68,6 +68,8 @@ for a guided walkthrough using a small regional extract.
 - GDAL/OGR 3.13+ with MVT and FlatGeoBuf drivers
 - imposm3 0.14.2+
 - tippecanoe (felt/tippecanoe fork) 2.79.0+
+- aria2 (`aria2c`), osmium-tool, and osmosis (OSM planet download + diff processing)
+- AWS CLI (Overture buildings sync)
 - Python 3.13+
 - Hardware: see [Performance & Sizing](https://mjj203.github.io/rbt-data-generator/performance/)
   — a small regional extract runs on a 16 GB laptop; a full planet needs
@@ -80,11 +82,10 @@ rbt-data-generator/
 ├── config/                        # rbt.conf + layers.yml (declarative layer registry)
 ├── src/rbt/                       # The rbt CLI — all orchestration (Python/Typer)
 │   ├── tiles/                     #   tippecanoe (3857/3395) + GDAL-MVT (4326) backends
-│   ├── importers/                 #   thin wrappers over the bash leaf importers
+│   ├── importers/                 #   native data importers (OSM, reference, GeoNames, Overture)
 │   ├── schema.py / setup_db.py    #   schema dispatch + database bootstrap
 │   └── checks.py                  #   rbt validate / smoke / health
-├── setup/data-sources/            # Bash leaf importers + imposm mapping + schema SQL
-├── scripts/lib/                   # Shared bash helpers for the leaf scripts
+├── setup/data-sources/            # imposm config + mapping + schema SQL
 ├── tools/                         # Standalone utilities (DuckDB buildings export)
 ├── tests/                         # pytest suite
 ├── docs/                          # MkDocs documentation site

@@ -4,18 +4,30 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
-### Removed
-- The deprecated bash tile generators (`production/generate-tiles.sh` and the
-  four scripts under `production/tile-generation/`, ~5,800 lines) and the
-  `rbt tiles --mode bash` escape hatch. Output parity between the bash and
-  native engines was verified by the temporary `parity-bridge` nightly job on
-  the fixture database (per-zoom tile counts, metadata, and decoded layer
-  sets); `docs/parity-runbook.md` now records the completed verification. The
-  bash-vs-native parity test suite retired with it — its two bash-independent
-  guardrails live on as `tests/test_tippecanoe_golden.py` and
-  `tests/test_layers.py::test_cli_category_flag_tuples_match_live_registry`.
-
 ### Added
+- Native Python data importers (`src/rbt/importers/`) replacing the four bash
+  leaf scripts: `buildings.py`, `geonames.py`, `reference.py`, and the OSM
+  import stages in `osm.py`, built on a shared toolkit (`_support.py`) with
+  declarative dataset registries, a canonical ogr2ogr command builder
+  (password via `PGPASSWORD`, never argv), a retrying parallel job pool with
+  per-job log files, and resume semantics (valid downloads and existing
+  tables are skipped; failures are collected so one bad dataset never blocks
+  the rest).
+- New importer CLI surface: `rbt import osm --stage <stage>`
+  (`--start-seq`/`--end-seq` for diffs), `rbt import reference
+  [--only NAME]... [--parallel] [--list]`, `rbt import geonames
+  [--only NAME]... [--list]`, and `rbt import buildings [--skip-parts]
+  [--release TEXT]` — all with `--dry-run`.
+- New configuration keys read by `Settings`: `OSM_DATA_DIR`, `OSM_CACHE_DIR`,
+  `OSM_DIFF_DIR`, `OSM_MAPPING_FILE`, `OSM_SRID`, `OSM_MIN_PBF_SIZE_MB`,
+  `DIFF_START_SEQ`/`DIFF_END_SEQ`, `OSM_CONNECTION`,
+  `OSM_VALIDATE_DOWNLOADS` (fallback `VALIDATE_DOWNLOADS`),
+  `OSM_CLEANUP_ON_EXIT` (fallback `CLEANUP_ON_EXIT`),
+  `ARIA2C_MAX_DOWNLOADS`/`ARIA2C_MAX_CONNECTIONS`/`ARIA2C_SPLITS`,
+  `WGET_PARALLEL_JOBS` (name kept for compatibility; now the generic
+  download-pool size), `CLEAN_TEMP_FILES`, `OVERTURE_RELEASE`, and
+  `OVERTURE_S3_BUCKET` — most were previously read only by the bash
+  importers.
 - Nightly integration workflow (`.github/workflows/nightly.yml`): imports a
   committed Liechtenstein OSM extract (`tests/fixtures/liechtenstein-*.osm.pbf`,
   ODbL — see `tests/fixtures/README.md`) with imposm, runs the
@@ -27,6 +39,54 @@ All notable changes to this project are documented in this file. The format is b
   for schema drift, and a temporary `parity-bridge` job executes the parity
   runbook's bash-vs-native output comparison on the fixture database ahead of
   the bash generators' removal.
+
+### Changed
+- **BREAKING:** `rbt import osm` takes a typed `--stage
+  all|download-planet|download-diffs|merge-diffs|apply-changes|import|import-diff`
+  option instead of pass-through arguments — `rbt import osm -- --import`
+  becomes `rbt import osm --stage import` (same for the `rbt osm import`
+  alias).
+- **BREAKING:** `rbt setup --osm-arg` is replaced by
+  `rbt setup --osm-stage <stage>`.
+- The full OSM pipeline (`--stage all`) no longer ends with a blocking
+  `imposm run` — it finishes after the initial import (continuous updates
+  are `rbt osm run`) — and single-stage runs no longer delete their outputs
+  (the bash EXIT trap removed intermediates even when a lone `--merge-diffs`
+  run had just produced them; cleanup now happens only after a successful
+  full run).
+- GeoNames TSV→CSV conversion uses the stdlib `csv` writer, which quotes
+  fields containing embedded commas — the retired `sed 's/\t/,/g'` silently
+  corrupted them. `wget`/`7z` usage is replaced by stdlib
+  `urllib`/`zipfile` downloads and extraction.
+- `rbt validate` tool list updated for the native importers: `aria2c`,
+  `osmium`, and `osmosis` are now required; `wget` and `7z` are dropped.
+
+### Fixed
+- `OSM_SRID` now defaults to `4326` (was `3857`): the `rbt.*` schema SQL
+  casts imposm-imported geometry to `::geometry(..., 4326)`, so importing in
+  3857 made every schema unit fail with an SRID mismatch.
+
+### Removed
+- The four bash leaf importers
+  (`setup/data-sources/osm/import-osm-data.sh`,
+  `setup/data-sources/reference-data/import-{reference-data,geonames,buildings}.sh`),
+  their shared helper library (`scripts/lib/`), and the `src/rbt/bash.py`
+  delegate — `setup/data-sources/` now holds only the imposm configuration
+  and the schema SQL. There is no bash left in the runtime path.
+- The `SCRIPT_*` configuration aliases (`SCRIPT_MAX_PARALLEL_JOBS`,
+  `SCRIPT_RETRY_COUNT`, `SCRIPT_RETRY_DELAY`, `SCRIPT_CONNECTION_TIMEOUT`,
+  `SCRIPT_PARALLEL_INGESTION`, `SCRIPT_CLEAN_TEMP_FILES`) — the unprefixed
+  names are the only spellings now. `SCRIPT_DEBUG`/`SCRIPT_VERBOSE` remain
+  as fallback aliases of `DEBUG`/`VERBOSE`.
+- The deprecated bash tile generators (`production/generate-tiles.sh` and the
+  four scripts under `production/tile-generation/`, ~5,800 lines) and the
+  `rbt tiles --mode bash` escape hatch. Output parity between the bash and
+  native engines was verified by the temporary `parity-bridge` nightly job on
+  the fixture database (per-zoom tile counts, metadata, and decoded layer
+  sets); `docs/parity-runbook.md` now records the completed verification. The
+  bash-vs-native parity test suite retired with it — its two bash-independent
+  guardrails live on as `tests/test_tippecanoe_golden.py` and
+  `tests/test_layers.py::test_cli_category_flag_tuples_match_live_registry`.
 
 ## [0.1.0] - 2026-07-02
 

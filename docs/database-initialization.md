@@ -1,16 +1,17 @@
 # Database Initialization
 
 One-time population of the PostGIS database with global datasets, orchestrated
-by the `rbt` CLI. The bootstrap (database + extensions) and schema processing
-are native Python; the four data importers remain Bash leaf scripts under
-`setup/data-sources/` that the CLI invokes with a fully resolved environment.
+by the `rbt` CLI. Every step is native Python: the bootstrap (database +
+extensions), the four data importers under `src/rbt/importers/`, and schema
+processing. External geospatial binaries (ogr2ogr, imposm, aria2c, osmium,
+osmosis, aws) are invoked as subprocesses.
 
 ## 📋 Table of Contents
 
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Entry Points](#entry-points)
-- [The Importer Leaf Scripts](#the-importer-leaf-scripts)
+- [The Importer Modules](#the-importer-modules)
 - [Tools and Technologies](#tools-and-technologies)
 - [Database Structure](#database-structure)
 - [Data Sources](#data-sources)
@@ -26,41 +27,35 @@ are native Python; the four data importers remain Bash leaf scripts under
 1. **Bootstrap** (`rbt setup --setup-database`) — creates the database and
    extensions (`postgis`, `postgis_raster`, `hstore`, `pg_trgm`) via psycopg
    (`src/rbt/setup_db.py`).
-2. **Data import** — four modular Bash leaf scripts, each independently
+2. **Data import** — four native importer modules, each independently
    re-runnable via `rbt import`:
-    - `rbt import osm` → `setup/data-sources/osm/import-osm-data.sh`
-    - `rbt import reference` → `setup/data-sources/reference-data/import-reference-data.sh`
-    - `rbt import geonames` → `setup/data-sources/reference-data/import-geonames.sh`
-    - `rbt import buildings` → `setup/data-sources/reference-data/import-buildings.sh`
+    - `rbt import osm` → `src/rbt/importers/osm.py`
+    - `rbt import reference` → `src/rbt/importers/reference.py`
+    - `rbt import geonames` → `src/rbt/importers/geonames.py`
+    - `rbt import buildings` → `src/rbt/importers/buildings.py`
 3. **Schema processing** (`rbt schema run --all`) — executes the eight
    PL/pgSQL files under `setup/data-sources/schemas/` through `psql` to build
    the `rbt.*` views consumed by tile generation.
 
-!!! warning "`rbt setup --all` blocks on the OSM step by default"
-    The OSM step passes `--all` to `import-osm-data.sh` unless overridden,
-    and that leaf-script stage ends by running `imposm run` — which blocks
-    indefinitely for continuous updates. **This means `rbt setup --all`
-    never reaches the reference/geonames/buildings/schema steps** unless you
-    override the OSM stage flag:
+!!! note "`rbt setup --all` returns when the initial import finishes"
+    The OSM step runs the full download → import pipeline and **returns** —
+    it does not start continuous replication (that is `rbt osm run`,
+    started separately after setup). Use `--osm-stage <stage>` to run a
+    narrower OSM stage within setup, e.g. when the planet file is already
+    on disk:
 
     ```bash
-    rbt setup --all --osm-arg=--import
+    rbt setup --all --osm-stage import
     ```
 
-    `--osm-arg` is repeatable and passed through verbatim to the leaf script
-    (use the `=` form: `--osm-arg=--import`); `--import` runs the one-time
-    planet import and returns, without starting continuous replication. Start
-    continuous updates separately afterward with `rbt osm run`.
-
-The importer scripts are designed for CI/CD pipelines and containerized
+The importers are designed for CI/CD pipelines and containerized
 environments, featuring:
 
-- ✅ Parallel processing for faster data ingestion
+- ✅ Parallel processing for faster data ingestion (bounded thread pools)
 - ✅ Automatic retry mechanisms with configurable attempts
-- ✅ Comprehensive logging with timestamps
-- ✅ Graceful error handling and cleanup
-- ✅ Progress tracking and colored output
-- ✅ Container-friendly signal handling
+- ✅ Comprehensive logging with one log file per job
+- ✅ Failure collection — one bad dataset never blocks the rest
+- ✅ Resume semantics — valid downloads and existing tables are skipped
 
 ## Architecture
 
@@ -69,10 +64,10 @@ environments, featuring:
 ```mermaid
 flowchart TD
     A["rbt setup --all"] --> B["Bootstrap<br/>CREATE DATABASE + EXTENSIONS<br/>(psycopg)"]
-    B --> C["rbt import osm<br/>import-osm-data.sh"]
-    B --> D["rbt import reference<br/>import-reference-data.sh"]
-    B --> E["rbt import geonames<br/>import-geonames.sh"]
-    B --> F["rbt import buildings<br/>import-buildings.sh"]
+    B --> C["rbt import osm<br/>src/rbt/importers/osm.py"]
+    B --> D["rbt import reference<br/>src/rbt/importers/reference.py"]
+    B --> E["rbt import geonames<br/>src/rbt/importers/geonames.py"]
+    B --> F["rbt import buildings<br/>src/rbt/importers/buildings.py"]
     C --> G[("PostgreSQL + PostGIS")]
     D --> G
     E --> G
@@ -86,13 +81,12 @@ flowchart TD
 === "rbt CLI"
 
     ```bash
-    # Complete initialization (recommended) — see the warning above about
-    # overriding the OSM stage so this doesn't block on continuous updates
-    rbt setup --all --osm-arg=--import
+    # Complete initialization (recommended)
+    rbt setup --all
 
     # Run individual steps
     rbt setup --setup-database          # bootstrap only
-    rbt setup --import-osm-data
+    rbt setup --import-osm-data         # honors --osm-stage
     rbt setup --import-reference-data
     rbt setup --import-geonames
     rbt setup --import-buildings
@@ -115,38 +109,44 @@ flowchart TD
 !!! note "Replaced scripts"
     `rbt setup` replaces the former `setup/init-database.sh`, and
     `rbt schema run` replaces the `process-physical-schemas.sh` /
-    `process-cultural-schemas.sh` wrappers. Those scripts no longer exist.
+    `process-cultural-schemas.sh` wrappers. The four bash importers that
+    previously lived under `setup/data-sources/` were ported to the native
+    modules in `src/rbt/importers/`. None of those scripts exist anymore.
 
-## The Importer Leaf Scripts
+## The Importer Modules
 
-**Location**: `setup/data-sources/*/`
+**Location**: `src/rbt/importers/`
 
-Each script carries a `CONTRACT` header documenting its inputs, outputs, and
-exit behavior. They are invoked only through the `rbt` CLI, which resolves and
-exports the `DATABASE_*`/`PG*` environment they expect — do not run them
-directly.
+Each module declares its datasets in a registry (URLs, target tables,
+ogr2ogr options) and shares one toolkit (`_support.py`): the canonical
+ogr2ogr command builder, psycopg schema/table helpers, a retrying parallel
+job pool, and stdlib download/extract/convert plumbing.
 
-| Entry point | Leaf script | Loads |
+| Entry point | Module | Loads |
 |---|---|---|
-| `rbt import osm` | `osm/import-osm-data.sh` | OpenStreetMap planet via Imposm3 |
-| `rbt import reference` | `reference-data/import-reference-data.sh` | FieldMaps, Natural Earth, OurAirports, MIRTA, OSM ocean/Antarctica |
-| `rbt import geonames` | `reference-data/import-geonames.sh` | NGA GNS geographic names (parallel download) |
-| `rbt import buildings` | `reference-data/import-buildings.sh` | Overture Maps building footprints from S3 |
+| `rbt import osm` | `src/rbt/importers/osm.py` | OpenStreetMap planet via Imposm3 |
+| `rbt import reference` | `src/rbt/importers/reference.py` | FieldMaps, Natural Earth, OurAirports, MIRTA, OSM ocean/Antarctica |
+| `rbt import geonames` | `src/rbt/importers/geonames.py` | NGA GNS + USGS GNIS geographic names (parallel download) |
+| `rbt import buildings` | `src/rbt/importers/buildings.py` | Overture Maps building footprints from S3 |
 
-Extra arguments after the subcommand are passed through to the script, and
-`--dry-run` prints the command without executing:
+Every subcommand takes `--dry-run` (print the external commands without
+executing), and the OSM importer selects its pipeline stage with a typed
+`--stage` option:
 
 ```bash
 rbt import osm --dry-run
-rbt import osm -- --download-planet
+rbt import osm --stage download-planet
+rbt import reference --only mirta
+rbt import geonames --list
 ```
 
 **Key features**:
 
 - Independent execution capability
-- Parallel processing within each component
+- Parallel processing within each importer (bounded thread pools)
 - Smart table existence checking (re-runs skip completed work)
-- Automatic retry mechanisms
+- Automatic retry mechanisms (`RETRY_COUNT` × `RETRY_DELAY`)
+- Per-dataset selection (`--only`) and registry listing (`--list`)
 - AWS S3 sync for the large Overture dataset, with incremental download
   support and optimized PostgreSQL COPY operations
 
@@ -162,7 +162,7 @@ Primary tool for spatial data translation and loading. Key parameters used:
 ogr2ogr -progress \                    # Show progress bar
     -f "PostgreSQL" \                   # Output format
     --config PG_USE_COPY YES \          # Use fast COPY instead of INSERT
-    "PG:host=... dbname=... user=..." \# Connection string
+    "PG:host=... dbname=... user=..." \# Connection string (password via PGPASSWORD)
     -lco GEOMETRY_NAME=geometry \       # Geometry column name
     -lco DIM=2 \                        # Force 2D geometries
     -lco UNLOGGED=ON \                  # Create unlogged tables (faster)
@@ -184,15 +184,18 @@ ogr2ogr -progress \                    # Show progress bar
 - `PG_USE_COPY`: Use PostgreSQL COPY command for bulk loading
 - Thread and memory settings for performance
 
+Most remote datasets are streamed directly through GDAL's virtual
+filesystems (`/vsicurl/`, `/vsizip//vsicurl/`) — no separate download step.
+
 #### **psql** (PostgreSQL Client)
 
 Used for:
 
-- Database connectivity testing
-- Direct SQL execution
-- Table existence verification
 - Schema processing — `rbt schema run` shells out to
   `psql -v ON_ERROR_STOP=1 -f <unit>.sql`
+
+(Connectivity tests and table-existence checks that the bash importers ran
+through `psql` are now direct psycopg queries.)
 
 #### **PostGIS Extensions**
 
@@ -208,11 +211,14 @@ Spatial database extensions providing:
 
 ### Supporting Utilities
 
-- **wget**: HTTP/HTTPS file downloads with retry support
+- **aria2c**: segmented multi-mirror download of the OSM planet PBF
+- **osmium / osmosis**: OSM diff merging and change application
+- **imposm**: OSM planet import into PostGIS
 - **aws**: S3 data synchronization (Overture data)
-- **7z**: Archive extraction for compressed datasets
-- **unzip**: ZIP file extraction
-- **timeout**: Command execution time limits
+- **Python stdlib** (`urllib`, `zipfile`, `csv`): single-URL downloads,
+  archive extraction, and TSV→CSV conversion — replacing the retired bash
+  importers' `wget`, `7z`, and `sed` usage. The `csv`-based conversion
+  quotes fields containing commas instead of silently corrupting them.
 
 ## Database Structure
 
@@ -330,10 +336,11 @@ rbt validate
 
 ```bash
 # Run complete database initialization (recommended)
-rbt setup --all --osm-arg=--import
+rbt setup --all
 
-# Or run individual importers separately (rbt import osm needs a stage flag)
-rbt import osm -- --all
+# Or run individual importers separately
+rbt import osm                    # full download → import pipeline
+rbt import osm --stage import     # just the imposm import stage
 rbt import reference
 rbt import geonames
 rbt import buildings
@@ -348,11 +355,15 @@ rbt setup --all --dry-run
 # Debug-level CLI logging
 rbt --debug setup --all
 
-# The leaf scripts honor SCRIPT_* settings from config/rbt.conf;
-# override per run via the environment
-SCRIPT_PARALLEL_INGESTION=true rbt setup --all
-SCRIPT_CLEAN_TEMP_FILES=false rbt import buildings
-SCRIPT_MAX_PARALLEL_JOBS=8 rbt import reference
+# Run every reference dataset in one pool instead of the two-phase default
+rbt import reference --parallel
+
+# Import only named datasets (repeatable; discover names with --list)
+rbt import reference --only mirta --only naturalearth
+rbt import geonames --only populated_places
+
+# Tune the job pools via config/rbt.conf or the environment
+MAX_PARALLEL_JOBS=8 rbt import reference
 ```
 
 ## Schema Processing
@@ -406,12 +417,11 @@ Resolved by `src/rbt/config.py` with precedence: environment variables →
 | **DATABASE_HOST** | `localhost` | PostgreSQL host (legacy: `PG_HOST`) |
 | **DATABASE_USER** | `postgres` | PostgreSQL username (legacy: `PG_USR`) |
 | **DATABASE_PASSWORD** | *(unset)* | PostgreSQL password (legacy: `PG_PASS`) |
-| **MAX_PARALLEL_JOBS** | 4 | Maximum concurrent jobs |
-| **RETRY_COUNT** | 3 | Attempts per operation |
+| **MAX_PARALLEL_JOBS** | 4 | Ingest job pool size |
+| **RETRY_COUNT** | 3 | Attempts per job |
 | **RETRY_DELAY** | 30 | Seconds between retries |
-| **SCRIPT_PARALLEL_INGESTION** | false | Enable full parallel mode in the importers |
-| **SCRIPT_DEBUG** | false | Enable importer debug output |
-| **SCRIPT_CLEAN_TEMP_FILES** | false | Remove temp files after completion |
+| **WGET_PARALLEL_JOBS** | 8 | Download pool size (name kept for compatibility) |
+| **OVERTURE_RELEASE** | 2026-06-17.0 | Pinned Overture buildings release |
 | **SHARED_LOG_DIR** | ./output/logs | Log file directory |
 | **SHARED_TEMP_DIR** | ./output/temp | Temporary file directory |
 
@@ -469,10 +479,10 @@ rm -rf ./output/temp/*
 ```bash
 # Check the per-invocation CLI log
 tail -n 50 output/logs/rbt_*.log
-# Importer leaf-script logs
-tail -n 50 output/logs/database_setup_*.log
-# Review specific parallel-job output
-cat output/temp/job_name.log
+# Per-job importer logs (one file per dataset/stage)
+tail -n 50 output/logs/reference_mirta_*.log
+tail -n 50 output/logs/geonames_populated_places_*.log
+tail -n 50 output/logs/osm_download_planet_*.log
 ```
 
 ### Debug Mode
@@ -480,26 +490,28 @@ cat output/temp/job_name.log
 Enable comprehensive debugging:
 
 ```bash
-SCRIPT_DEBUG=true SCRIPT_VERBOSE=true SCRIPT_CLEAN_TEMP_FILES=false rbt setup --all
+rbt --debug setup --all
 ```
 
-This preserves all temporary files and provides detailed execution traces.
+Add `--dry-run` to any command to print the exact external commands without
+executing them.
 
 ### Log Files
 
 Logs are centralized under `$SHARED_LOG_DIR` (default `./output/logs`):
 
 - CLI logs: `rbt_YYYYMMDD_HHMMSS.log`
-- Importer logs: `database_setup_*.log`, `geonames_setup_*.log`, `overture_buildings_*.log`, `osm_import.log`
+- Per-job importer logs: `<importer>_<job>_YYYYMMDD_HHMMSS.log`
+  (e.g. `osm_import_*.log`, `reference_fieldmaps_adm0_*.log`,
+  `geonames_hydrographic_*.log`, `buildings_s3_sync_*.log`)
 - Schema logs: `schema_<key>_YYYYMMDD_HHMMSS.log`
-- Job-specific logs (parallel processing): `${SHARED_TEMP_DIR}/[job_name].log`
 
 ## Best Practices
 
 1. **Pre-flight Checks**: Run `rbt validate` before running setup
 2. **Incremental Loading**: Importers check for existing tables to avoid redundant work — re-running `rbt setup` is safe
 3. **Resource Management**: Adjust `MAX_PARALLEL_JOBS` based on system capacity
-4. **Monitoring**: Use `SCRIPT_DEBUG=true` for first-time runs
+4. **Monitoring**: Use `rbt --debug` for first-time runs
 5. **Backup**: Consider backing up the database before major ingestions
 6. **Post-Processing**: Run ANALYZE on tables after loading for query optimization
 
