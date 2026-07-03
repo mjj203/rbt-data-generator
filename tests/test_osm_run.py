@@ -54,9 +54,7 @@ def test_run_updates_dry_run_redacts_connection(
 # ---------------------------------------------------------------------------
 
 
-def test_build_run_config_merges_settings(
-    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_build_run_config_merges_settings(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`imposm run` gets connection/mapping/dirs/srid merged over the base config."""
     monkeypatch.setenv("PG_PASS", "s3cret-pw")
     monkeypatch.setenv("OSM_CACHE_DIR", "/app/output/osm/cache")
