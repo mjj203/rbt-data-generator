@@ -13,6 +13,9 @@ on:
     - cron: "17 6 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   # See ci.yml for why both are needed under GitHub Actions.
   NO_COLOR: "1"

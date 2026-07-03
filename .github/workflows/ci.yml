@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# Least-privilege default; docker-publish widens itself to packages: write.
+permissions:
+  contents: read
+
 env:
   # GitHub Actions sets GITHUB_ACTIONS=true, which makes Typer/Rich force
   # terminal-style rendering even though stdout is a captured pipe. That
