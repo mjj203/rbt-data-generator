@@ -18,6 +18,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 
 from psycopg.conninfo import make_conninfo
 
@@ -76,6 +77,47 @@ class Settings:
 
     # OSM continuous updates
     osm_config_file: Path = Path("setup/data-sources/osm/imposm-config.json")
+
+    # OSM data import (planet download → diffs → imposm)
+    osm_data_dir: Path = Path("/mnt/data")
+    osm_cache_dir: Path = Path("/mnt/cache")
+    osm_diff_dir: Path = Path("/mnt/diff")
+    osm_mapping_file: Path = Path("setup/data-sources/osm/imposm-mapping.yaml")
+    osm_srid: int = 3857
+    osm_min_pbf_size_mb: int = 50000
+    osm_diff_start_seq: int = 713
+    osm_diff_end_seq: int = 730
+    osm_connection_override: str = ""  # OSM_CONNECTION; else derived from database_*
+    osm_validate_downloads: bool = True
+    osm_cleanup_on_exit: bool = True
+    aria2c_max_downloads: int = 12
+    aria2c_max_connections: int = 16
+    aria2c_splits: int = 9
+    # Parallel single-URL downloads (env key WGET_PARALLEL_JOBS for
+    # backwards compatibility with the retired wget-based importer).
+    download_parallel_jobs: int = 8
+    clean_temp_files: bool = False
+
+    # Overture buildings import
+    overture_release: str = "2026-06-17.0"
+    overture_s3_bucket: str = "s3://overturemaps-us-west-2/"
+
+    def imposm_connection(self) -> str:
+        """imposm's postgis:// connection URL (OSM_CONNECTION override wins).
+
+        imposm parses a URL, not a libpq conninfo, and does not read
+        PGPASSWORD — the password must be embedded. process.run() redacts
+        URL userinfo before logging.
+        """
+        if self.osm_connection_override:
+            return self.osm_connection_override
+        auth = quote(self.database_user, safe="")
+        if self.database_password:
+            auth += ":" + quote(self.database_password, safe="")
+        return (
+            f"postgis://{auth}@{self.database_host}:{self.database_port}"
+            f"/{self.database_name}?prefix=NONE"
+        )
 
     def psql_conn_string(self, dbname: str | None = None) -> str:
         # make_conninfo escapes values (quoting spaces, backslashes, quotes), so
@@ -295,6 +337,33 @@ def load_settings(overrides: dict[str, str] | None = None) -> Settings:
                 "OSM_CONFIG_FILE",
                 default=str(root / "setup" / "data-sources" / "osm" / "imposm-config.json"),
             )
+        ),
+        osm_data_dir=Path(resolve("OSM_DATA_DIR", default="/mnt/data")),
+        osm_cache_dir=Path(resolve("OSM_CACHE_DIR", default="/mnt/cache")),
+        osm_diff_dir=Path(resolve("OSM_DIFF_DIR", default="/mnt/diff")),
+        osm_mapping_file=Path(
+            resolve(
+                "OSM_MAPPING_FILE",
+                default=str(root / "setup" / "data-sources" / "osm" / "imposm-mapping.yaml"),
+            )
+        ),
+        osm_srid=_coerce_int(resolve("OSM_SRID"), 3857),
+        osm_min_pbf_size_mb=_coerce_int(resolve("OSM_MIN_PBF_SIZE_MB"), 50000),
+        osm_diff_start_seq=_coerce_int(resolve("DIFF_START_SEQ"), 713),
+        osm_diff_end_seq=_coerce_int(resolve("DIFF_END_SEQ"), 730),
+        osm_connection_override=resolve("OSM_CONNECTION", default=""),
+        osm_validate_downloads=_coerce_bool(
+            resolve("OSM_VALIDATE_DOWNLOADS", "VALIDATE_DOWNLOADS"), True
+        ),
+        osm_cleanup_on_exit=_coerce_bool(resolve("OSM_CLEANUP_ON_EXIT", "CLEANUP_ON_EXIT"), True),
+        aria2c_max_downloads=_coerce_int(resolve("ARIA2C_MAX_DOWNLOADS"), 12),
+        aria2c_max_connections=_coerce_int(resolve("ARIA2C_MAX_CONNECTIONS"), 16),
+        aria2c_splits=_coerce_int(resolve("ARIA2C_SPLITS"), 9),
+        download_parallel_jobs=_coerce_int(resolve("WGET_PARALLEL_JOBS"), 8),
+        clean_temp_files=_coerce_bool(resolve("CLEAN_TEMP_FILES"), False),
+        overture_release=resolve("OVERTURE_RELEASE", default="2026-06-17.0"),
+        overture_s3_bucket=resolve(
+            "OVERTURE_S3_BUCKET", default="s3://overturemaps-us-west-2/"
         ),
     )
 
