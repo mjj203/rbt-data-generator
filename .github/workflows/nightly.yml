@@ -12,13 +12,6 @@ on:
   schedule:
     - cron: "17 6 * * *"
   workflow_dispatch:
-  # TEMPORARY validation trigger — remove before merge. schedule/
-  # workflow_dispatch only fire once this file is on the default branch, so
-  # the PR run is the only way to prove the jobs green pre-merge.
-  pull_request:
-    paths:
-      - ".github/workflows/nightly.yml"
-      - "tests/fixtures/**"
 
 env:
   # See ci.yml for why both are needed under GitHub Actions.
