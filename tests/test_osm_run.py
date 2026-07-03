@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import signal
 import subprocess
@@ -34,6 +36,81 @@ def test_run_updates_dry_run_skips_popen(fake_repo: Path, monkeypatch: pytest.Mo
     settings = load_settings()
     osm_mod.run_updates(settings, dry_run=True)
     assert not _pidfile(settings).exists()
+
+
+def test_run_updates_dry_run_redacts_connection(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("PG_PASS", "s3cret-pw")
+    settings = load_settings()
+    with caplog.at_level(logging.INFO):
+        osm_mod.run_updates(settings, dry_run=True)
+    assert "s3cret-pw" not in caplog.text
+    assert "<generated>" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# generated run config
+# ---------------------------------------------------------------------------
+
+
+def test_build_run_config_merges_settings(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`imposm run` gets connection/mapping/dirs/srid merged over the base config."""
+    monkeypatch.setenv("PG_PASS", "s3cret-pw")
+    monkeypatch.setenv("OSM_CACHE_DIR", "/app/output/osm/cache")
+    monkeypatch.setenv("OSM_DIFF_DIR", "/app/output/osm/diff")
+    settings = load_settings()
+
+    config = osm_mod._build_run_config(settings)
+
+    # the committed replication settings survive the merge...
+    assert config["replication_url"] == "https://planet.openstreetmap.org/replication/day/"
+    assert config["replication_interval"] == "24h"
+    assert config["diff_state_before"] == "24h"
+    # ...and everything imposm needs to actually apply diffs is added.
+    assert config["connection"] == settings.imposm_connection()
+    assert "s3cret-pw" in str(config["connection"])  # imposm needs it embedded
+    assert config["mapping"] == str(fake_repo / "setup/data-sources/osm/imposm-mapping.yaml")
+    assert config["cachedir"] == "/app/output/osm/cache"
+    assert config["diffdir"] == "/app/output/osm/diff"
+    assert config["srid"] == settings.osm_srid
+
+
+def test_run_updates_passes_generated_config(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The supervisor hands imposm a generated config file and removes it after exit."""
+    bindir = fake_repo / "fakebin"
+    bindir.mkdir()
+    captured_config = fake_repo / "captured-config.json"
+    captured_argv = fake_repo / "captured-argv.txt"
+    shim = bindir / "imposm"
+    # $1=run $2=-config $3=<generated path>; record both the path and its contents.
+    shim.write_text(
+        f'#!/bin/sh\nprintf \'%s\' "$3" > "{captured_argv}"\ncat "$3" > "{captured_config}"\n',
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("PG_PASS", "s3cret-pw")
+    settings = load_settings()
+
+    with caplog.at_level(logging.INFO):
+        osm_mod.run_updates(settings)
+
+    config = json.loads(captured_config.read_text(encoding="utf-8"))
+    assert config["connection"] == settings.imposm_connection()
+    assert config["mapping"] == str(fake_repo / "setup/data-sources/osm/imposm-mapping.yaml")
+    assert config["cachedir"] == str(settings.osm_cache_dir)
+    assert config["diffdir"] == str(settings.osm_diff_dir)
+    assert config["srid"] == settings.osm_srid
+    assert config["replication_url"] == "https://planet.openstreetmap.org/replication/day/"
+    # the generated temp file is cleaned up once the supervisor exits, and the
+    # password never reaches the logs (it travels in the 0600 file, not argv).
+    assert not Path(captured_argv.read_text(encoding="utf-8")).exists()
+    assert "s3cret-pw" not in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -159,9 +236,6 @@ def test_stop_updates_terminates_running_supervisor(
     shim.write_text("#!/bin/sh\nexec sleep 30\n", encoding="utf-8")
     shim.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
-
-    # Popen cwd is the imposm config directory.
-    (fake_repo / "setup/data-sources/osm").mkdir(parents=True)
 
     monkeypatch.setattr(osm_mod, "signal", _SignalShim)
     settings = load_settings()

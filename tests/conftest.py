@@ -112,6 +112,16 @@ DATABASE_USER=${PG_USR:-postgres}
 DATABASE_PASSWORD=${PG_PASS:-}
 """
 
+# Mirrors the committed setup/data-sources/osm/imposm-config.json: replication
+# settings only — `rbt osm run` merges connection/mapping/dirs at runtime.
+FAKE_IMPOSM_CONFIG = """\
+{
+    "replication_url": "https://planet.openstreetmap.org/replication/day/",
+    "replication_interval": "24h",
+    "diff_state_before": "24h"
+}
+"""
+
 _SCRUBBED_ENV_PREFIXES = ("PG", "DATABASE_", "RBT_", "OSM_", "TILE_", "SHARED_")
 
 
@@ -145,6 +155,7 @@ def fake_repo(tmp_path: Path, monkeypatch) -> Path:
     for rel in (
         "setup/data-sources/schemas/physical",
         "setup/data-sources/schemas/cultural",
+        "setup/data-sources/osm",
         "output/logs",
         "output/tiles",
     ):
@@ -154,6 +165,9 @@ def fake_repo(tmp_path: Path, monkeypatch) -> Path:
     )
     (tmp_path / "setup/data-sources/schemas/cultural/cultural-core.sql").write_text(
         "SELECT 1;\n", encoding="utf-8"
+    )
+    (tmp_path / "setup/data-sources/osm/imposm-config.json").write_text(
+        FAKE_IMPOSM_CONFIG, encoding="utf-8"
     )
     monkeypatch.setenv("RBT_PROJECT_ROOT", str(tmp_path))
     paths.project_root.cache_clear()

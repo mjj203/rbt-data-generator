@@ -20,10 +20,12 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import re
 import signal
 import subprocess
+import tempfile
 import time
 from collections.abc import Callable
 from enum import Enum
@@ -446,6 +448,38 @@ def import_osm(
 # ---------------------------------------------------------------------------
 
 
+def _build_run_config(settings: Settings) -> dict[str, object]:
+    """Merged imposm config for ``imposm run``.
+
+    The committed imposm-config.json carries only the replication settings;
+    the connection URL, mapping file, state directories, and SRID live in
+    :class:`Settings` (the import stages pass them as CLI flags). ``imposm
+    run`` is long-lived, so flags would leave the database password visible
+    in ``/proc/<pid>/cmdline`` for the container's entire life — instead the
+    full config is merged here and written to a private temp file.
+    """
+    base_path = _resolve_path(settings, settings.osm_config_file)
+    config: dict[str, object] = json.loads(base_path.read_text(encoding="utf-8"))
+    config.update(
+        {
+            "connection": settings.imposm_connection(),
+            "mapping": str(_resolve_path(settings, settings.osm_mapping_file)),
+            "cachedir": str(settings.osm_cache_dir),
+            "diffdir": str(settings.osm_diff_dir),
+            "srid": settings.osm_srid,
+        }
+    )
+    return config
+
+
+def _write_run_config(settings: Settings) -> Path:
+    """Write the merged run config to a private (0600) temp file."""
+    fd, name = tempfile.mkstemp(prefix="imposm-run-", suffix=".json")
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(_build_run_config(settings), handle)
+    return Path(name)
+
+
 def _pidfile(settings: Settings) -> Path:
     return settings.shared_temp_dir / "imposm-run.pid"
 
@@ -470,14 +504,19 @@ def run_updates(settings: Settings, *, dry_run: bool = False) -> None:
     Blocks indefinitely (this is the ``rbt-osm-updates`` container's main
     process). SIGTERM/SIGINT terminate the child gracefully; a non-zero child
     exit that wasn't signal-initiated raises :class:`CommandFailed`.
+
+    imposm's connection/mapping/cachedir/diffdir/srid are merged into a
+    generated runtime config (:func:`_build_run_config`) rather than passed
+    as flags, keeping the database password out of the process argv.
     """
-    config_path = settings.osm_config_file
-    if not config_path.is_absolute():
-        config_path = settings.project_root / config_path
-    cmd = ["imposm", "run", "-config", str(config_path)]
+    base_config = _resolve_path(settings, settings.osm_config_file)
 
     if dry_run:
-        log.info("[dry-run] %s", " ".join(cmd))
+        redacted = {**_build_run_config(settings), "connection": "<redacted>"}
+        log.info(
+            "[dry-run] imposm run -config <generated>: %s",
+            json.dumps(redacted, sort_keys=True),
+        )
         return
 
     existing = _read_pid(settings)
@@ -485,16 +524,22 @@ def run_updates(settings: Settings, *, dry_run: bool = False) -> None:
         raise RuntimeError(f"imposm run already active (pid {existing}); use `rbt osm stop` first")
 
     settings.shared_temp_dir.mkdir(parents=True, exist_ok=True)
+    run_config_path = _write_run_config(settings)
+    cmd = ["imposm", "run", "-config", str(run_config_path)]
     log.info("starting continuous OSM updates: %s", " ".join(cmd))
 
-    process = subprocess.Popen(  # noqa: S603 - fixed command list
-        cmd,
-        cwd=config_path.parent,
-        env={**os.environ, **settings.subprocess_env()},
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
+    try:
+        process = subprocess.Popen(  # noqa: S603 - fixed command list
+            cmd,
+            cwd=base_config.parent,
+            env={**os.environ, **settings.subprocess_env()},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+    except Exception:
+        run_config_path.unlink(missing_ok=True)
+        raise
     pidfile = _pidfile(settings)
     pidfile.write_text(str(process.pid), encoding="utf-8")
 
@@ -523,6 +568,7 @@ def run_updates(settings: Settings, *, dry_run: bool = False) -> None:
         for signum, handler in previous_handlers.items():
             signal.signal(signum, handler)
         pidfile.unlink(missing_ok=True)
+        run_config_path.unlink(missing_ok=True)
         if process.stdout is not None:
             process.stdout.close()
 
