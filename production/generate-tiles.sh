@@ -641,13 +641,13 @@ main() {
     # Generate tiles
     for proj in "${projections[@]}"; do
         if [[ "$LAYER_TYPE" == "all" || "$LAYER_TYPE" == "physical" ]]; then
-            ((step++))
+            step=$((step + 1))
             show_progress $step $total_steps "Physical tiles $proj"
             generate_physical_tiles "$proj"
         fi
         
         if [[ "$LAYER_TYPE" == "all" || "$LAYER_TYPE" == "cultural" ]]; then
-            ((step++))
+            step=$((step + 1))
             show_progress $step $total_steps "Cultural tiles $proj"
             generate_cultural_tiles "$proj"
         fi
