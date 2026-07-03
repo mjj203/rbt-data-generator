@@ -83,7 +83,7 @@ class Settings:
     osm_cache_dir: Path = Path("/mnt/cache")
     osm_diff_dir: Path = Path("/mnt/diff")
     osm_mapping_file: Path = Path("setup/data-sources/osm/imposm-mapping.yaml")
-    osm_srid: int = 3857
+    osm_srid: int = 4326
     osm_min_pbf_size_mb: int = 50000
     osm_diff_start_seq: int = 713
     osm_diff_end_seq: int = 730
@@ -350,7 +350,7 @@ def load_settings(overrides: dict[str, str] | None = None) -> Settings:
                 default=str(root / "setup" / "data-sources" / "osm" / "imposm-mapping.yaml"),
             )
         ),
-        osm_srid=_coerce_int(resolve("OSM_SRID"), 3857),
+        osm_srid=_coerce_int(resolve("OSM_SRID"), 4326),
         osm_min_pbf_size_mb=_coerce_int(resolve("OSM_MIN_PBF_SIZE_MB"), 50000),
         osm_diff_start_seq=_coerce_int(resolve("DIFF_START_SEQ"), 713),
         osm_diff_end_seq=_coerce_int(resolve("DIFF_END_SEQ"), 730),
