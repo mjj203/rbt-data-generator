@@ -1,8 +1,7 @@
 """Database bootstrap and setup orchestration (``rbt setup``).
 
-Replaces ``setup/init-database.sh``: creates the database and extensions via
-psycopg, then sequences the data importers (which remain bash leaf scripts,
-called through :mod:`rbt.importers`) and schema processing.
+Creates the database and extensions via psycopg, then sequences the native
+data importers (:mod:`rbt.importers`) and schema processing.
 """
 
 from __future__ import annotations
@@ -16,8 +15,8 @@ from .config import Settings
 from .importers import buildings as buildings_importer
 from .importers import geonames as geonames_importer
 from .importers import osm as osm_importer
-from .importers.osm import OsmStage
 from .importers import reference as reference_importer
+from .importers.osm import OsmStage
 from .layers import LayerRegistry
 from .logging import get_logger
 from .schema import run_schemas

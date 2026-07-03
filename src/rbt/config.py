@@ -365,9 +365,7 @@ def load_settings(overrides: dict[str, str] | None = None) -> Settings:
         download_parallel_jobs=_coerce_int(resolve("WGET_PARALLEL_JOBS"), 8),
         clean_temp_files=_coerce_bool(resolve("CLEAN_TEMP_FILES"), False),
         overture_release=resolve("OVERTURE_RELEASE", default="2026-06-17.0"),
-        overture_s3_bucket=resolve(
-            "OVERTURE_S3_BUCKET", default="s3://overturemaps-us-west-2/"
-        ),
+        overture_s3_bucket=resolve("OVERTURE_S3_BUCKET", default="s3://overturemaps-us-west-2/"),
     )
 
     return settings

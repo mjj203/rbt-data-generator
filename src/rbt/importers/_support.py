@@ -115,8 +115,7 @@ def build_ogr2ogr_cmd(dataset: OgrDataset, settings: Settings, source: str) -> l
 def table_exists(settings: Settings, schema: str, table: str) -> bool:
     with psycopg.connect(settings.psql_conn_string(), connect_timeout=30) as conn:
         row = conn.execute(
-            "SELECT 1 FROM information_schema.tables"
-            " WHERE table_schema = %s AND table_name = %s",
+            "SELECT 1 FROM information_schema.tables WHERE table_schema = %s AND table_name = %s",
             (schema, table),
         ).fetchone()
     return row is not None
@@ -129,9 +128,7 @@ def ensure_schemas(settings: Settings, schemas: Iterable[str], *, dry_run: bool 
         return
     with psycopg.connect(settings.psql_conn_string(), autocommit=True) as conn:
         for name in names:
-            conn.execute(
-                sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(name))
-            )
+            conn.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(name)))
     log.info("schemas ensured: %s", ", ".join(names))
 
 

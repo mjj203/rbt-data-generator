@@ -163,11 +163,10 @@ ENV PATH="/opt/rbt-venv/bin:${PATH}"
 WORKDIR /app
 
 COPY config/ ./config/
-COPY scripts/ ./scripts/
 COPY setup/ ./setup/
 COPY tools/ ./tools/
 
-RUN find ./setup ./tools ./scripts -name "*.sh" -exec chmod +x {} \; \
+RUN find ./tools -name "*.sh" -exec chmod +x {} \; \
     && mkdir -p output/logs output/tiles cache \
     && groupadd --system rbt \
     && useradd --system --gid rbt --home-dir /app --shell /usr/sbin/nologin rbt \

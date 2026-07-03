@@ -94,8 +94,7 @@ def import_buildings(
             building_dir = dest / "type=building"
         else:
             raise FileNotFoundError(
-                f"no building data directory under {dest} "
-                "(expected 'type=building' or 'building')"
+                f"no building data directory under {dest} (expected 'type=building' or 'building')"
             )
     process.run_with_retry(
         build_ogr2ogr_cmd(_dataset("building"), settings, str(building_dir)),
