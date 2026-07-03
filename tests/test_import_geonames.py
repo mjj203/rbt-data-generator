@@ -68,7 +68,7 @@ def test_dataset_names_are_unique_and_ordered() -> None:
 
 
 def test_nga_datasets_fields_and_urls() -> None:
-    nga = [d for d in geonames.DATASETS if "geonames.nga.mil" in d.url]
+    nga = [d for d in geonames.DATASETS if urlparse(d.url).netloc == "geonames.nga.mil"]
     assert len(nga) == 9
     for dataset in nga:
         assert dataset.x_field == "long_dd"
@@ -80,7 +80,7 @@ def test_nga_datasets_fields_and_urls() -> None:
 
 
 def test_usgs_datasets_fields_and_urls() -> None:
-    usgs = [d for d in geonames.DATASETS if "prd-tnm.s3.amazonaws.com" in d.url]
+    usgs = [d for d in geonames.DATASETS if urlparse(d.url).netloc == "prd-tnm.s3.amazonaws.com"]
     assert len(usgs) == 2
     for dataset in usgs:
         assert dataset.x_field == "prim_long_dec"
