@@ -90,10 +90,15 @@ A unified script for running modular SQL processing with selective execution:
 - **CI/CD Ready**: Structured logging and validation for automated processing
 
 #### **Individual SQL Scripts**
-- **`physical.sql`**: Core physical layers (builtuparea, glacier, mountain_label, park)
-- **`landcover.sql`**: Comprehensive landcover processing with zoom-level views and label generation
-- **`water.sql`**: Advanced water processing with clustering, classification, and utility functions
-- **`contour.sql`**: Contour processing with conditional table handling and zoom-level views
+
+The bash orchestration below is historical, but these are the actual current
+files (`setup/data-sources/schemas/physical/`), dispatched today via `rbt
+schema run <key>`:
+
+- **`physical-core.sql`** (`rbt schema run physical`): Core physical layers (builtuparea, glacier, mountain_label, park)
+- **`landcover.sql`** (`rbt schema run landcover`): Comprehensive landcover processing with zoom-level views and label generation
+- **`water-features.sql`** (`rbt schema run water`): Advanced water processing with clustering, classification, and utility functions
+- **`terrain.sql`** (`rbt schema run contour`): Contour processing with conditional table handling and zoom-level views
 
 ### Tile Generation Scripts
 
@@ -267,7 +272,7 @@ WHERE NOT exist(tags, 'natural') OR (tags->'natural') != 'wetland';
 
 The physical data processing now uses a modular approach with separate SQL scripts for different layer types:
 
-#### **`physical.sql`** - Core Physical Layers
+#### **`physical-core.sql`** - Core Physical Layers
 - **Builtuparea**: Combines OSM and Natural Earth urban areas
 - **Glacier**: Merges glacier data from multiple sources including Antarctic ice shelves
 - **Mountain Labels**: Generates label lines using medial axis from geographic regions
@@ -280,14 +285,14 @@ The physical data processing now uses a modular approach with separate SQL scrip
 - **Multipolygon Handling**: Decomposes and ranks multipolygon features
 - **Performance Optimized**: Uses 32GB work_mem for large dataset processing
 
-#### **`water.sql`** - Advanced Water Processing
+#### **`water-features.sql`** - Advanced Water Processing
 - **Water Classification**: Normalizes 40+ water subtypes using pattern matching
 - **Clustering and Simplification**: Groups nearby features with ST_ClusterWithin
 - **Utility Functions**: Includes diagnostic and search functions for data analysis
 - **Trigram Search**: Fuzzy text matching for water feature names
 - **Transaction Safety**: Multiple transaction boundaries to preserve partial work
 
-#### **`contour.sql`** - Contour Processing
+#### **`terrain.sql`** - Contour Processing
 - **Conditional Processing**: Handles optional contour and glacier contour tables
 - **Zoom-Level Views**: Creates z8, z10, z12 views with nth_line filtering
 - **Performance Tuned**: Optimized memory settings for contour line processing
@@ -295,7 +300,7 @@ The physical data processing now uses a modular approach with separate SQL scrip
 
 ### Utility Functions
 
-#### **Water Type Classification** (`water.sql`)
+#### **Water Type Classification** (`water-features.sql`)
 ```sql
 CREATE OR REPLACE FUNCTION classify_water_type(subclass_input TEXT) 
 RETURNS TEXT AS $$
@@ -314,7 +319,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 - Handles fuzzy matching for inconsistent OSM tagging
 - Used in materialized views for consistent water type classification
 
-#### **Search and Diagnostic Functions** (`water.sql`)
+#### **Search and Diagnostic Functions** (`water-features.sql`)
 ```sql
 -- Fuzzy name search across water features
 SELECT * FROM search_water_features_fuzzy('mississippi', 0.3);

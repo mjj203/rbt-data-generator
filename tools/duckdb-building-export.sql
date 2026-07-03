@@ -30,10 +30,10 @@ SELECT
     b.height,
     ST_Area(ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:3857')) AS area,
     b.geometry
-FROM read_parquet('s3://overturemaps-us-west-2/release/2025-08-20.1/theme=buildings/type=building/*', filename=true, hive_partitioning=1) b
+FROM read_parquet('s3://overturemaps-us-west-2/release/2026-06-17.0/theme=buildings/type=building/*', filename=true, hive_partitioning=1) b
 LEFT JOIN (
     SELECT DISTINCT building_id 
-    FROM read_parquet('s3://overturemaps-us-west-2/release/2025-08-20.1/theme=buildings/type=building_part/*', filename=true, hive_partitioning=1)
+    FROM read_parquet('s3://overturemaps-us-west-2/release/2026-06-17.0/theme=buildings/type=building_part/*', filename=true, hive_partitioning=1)
 ) bp ON b.id = bp.building_id;
 
 CREATE OR REPLACE TABLE rbt_building_label AS

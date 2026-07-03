@@ -4,9 +4,11 @@ This document describes the standalone DuckDB workflow for exporting Overture
 building data directly to FlatGeobuf format, without requiring PostgreSQL
 ingestion. It is unrelated to `rbt import buildings` (the PostgreSQL-based
 importer used by `rbt setup` — see [Database Initialization](database-initialization.md)),
-which pins a different Overture release (`2025-05-21.0`) than this DuckDB
-path (`2025-08-20.1`, set in `tools/duckdb-building-export.sql`). Pick one
-path per pipeline; they are not meant to be combined.
+though both are pinned to the same Overture release (`2026-06-17.0`, set in
+`tools/duckdb-building-export.sql` and `import-buildings.sh`) — see the
+[Data Sources & Licensing](data-sources.md#overture-maps-buildings) page for
+why that pin must move in lockstep across both scripts. Pick one path per
+pipeline; they are not meant to be combined.
 
 ## Overview
 
@@ -130,7 +132,7 @@ below).
 | Setup | No database required | Requires PostGIS + `rbt setup --setup-database` |
 | Speed | Direct from cloud to FlatGeobuf | Ingests into `overture.building`/`buildingpart` first |
 | Output | Standalone `.fgb` files | Tables joined into `rbt.building*` by `cultural-core.sql` (currently commented out there — see [Database Schema](database-schema.md#buildings-land-use)) |
-| Overture release pinned | `2025-08-20.1` | `2025-05-21.0` |
+| Overture release pinned | `2026-06-17.0` (kept in sync with the importer) | `2026-06-17.0` |
 | Dependencies | DuckDB only | PostgreSQL + PostGIS + GDAL/ogr2ogr |
 
 ## Output Files

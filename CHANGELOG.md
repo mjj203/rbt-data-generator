@@ -4,19 +4,7 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
-### Changed
-- Upgraded the pinned toolchain: PostgreSQL 17 → 18 (PostGIS 3.5 → 3.6,
-  `postgis/postgis:18-3.6`), GDAL → 3.13.1, imposm3 0.11.1 → 0.14.2,
-  tippecanoe 2.78.0 → 2.79.0, and Python 3.11+ → 3.13+.
-- `Dockerfile.production` now installs Python and GDAL via
-  [micromamba](https://mamba.readthedocs.io/)/conda-forge instead of apt
-  (`gdal-bin`/`python3-gdal`/`python3`), since Ubuntu 24.04's repos only ship
-  GDAL 3.8.x and Python 3.12.
-- `docker-compose.yml`'s `postgres_data` volume now mounts at
-  `/var/lib/postgresql` instead of `/var/lib/postgresql/data`, matching the
-  PostgreSQL 18+ image's changed default data directory.
-
-## [0.1.0] - 2026-06-09
+## [0.1.0] - 2026-07-02
 
 Initial public release: the `rbt` CLI becomes the single orchestrator over a
 hybrid Python/bash pipeline, with a native EPSG:4326 backend, an expanded test
@@ -52,6 +40,16 @@ suite, a full documentation site, and open-source hygiene files.
   deprecated behind `rbt tiles --mode bash` pending the parity runbook.
 - Internal infrastructure references (logo, hostnames, IPs) scrubbed for
   public release.
+- Upgraded the pinned toolchain: PostgreSQL 17 → 18 (PostGIS 3.5 → 3.6,
+  `postgis/postgis:18-3.6`), GDAL → 3.13.1, imposm3 0.11.1 → 0.14.2,
+  tippecanoe 2.78.0 → 2.79.0, and Python 3.11+ → 3.13+.
+- `Dockerfile.production` now installs Python and GDAL via
+  [micromamba](https://mamba.readthedocs.io/)/conda-forge instead of apt
+  (`gdal-bin`/`python3-gdal`/`python3`), since Ubuntu 24.04's repos only ship
+  GDAL 3.8.x and Python 3.12.
+- `docker-compose.yml`'s `postgres_data` volume now mounts at
+  `/var/lib/postgresql` instead of `/var/lib/postgresql/data`, matching the
+  PostgreSQL 18+ image's changed default data directory.
 
 ### Removed
 - `setup/init-database.sh`, `production/update-osm.sh`,

@@ -145,6 +145,7 @@ nav:
     - Troubleshooting: troubleshooting.md
     - Bash Internals — Setup: setup-readme.md
     - Bash Internals — Production: production-readme.md
+    - Bash Internals — Shared Helpers: scripts-lib-readme.md
     - Tileserver-GL API: api/tileserver-api.md
   - Project:
     - Contributing: contributing.md

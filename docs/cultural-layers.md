@@ -41,7 +41,7 @@ This directory contains the complete workflow for processing cultural geospatial
 
 The cultural data processing workflow consists of three main components:
 
-1. **Database Layer** (`cultural.sql`): Creates materialized views, indexes, and optimized data structures in PostgreSQL/PostGIS
+1. **Database Layer** (`cultural-core.sql`, `transportation.sql`, `transportation-railway.sql`, `infrastructure.sql`): Creates materialized views, indexes, and optimized data structures in PostgreSQL/PostGIS
 2. **Tile Generation** (3 projection scripts): Exports data and generates vector tiles using different coordinate systems
 3. **Configuration** (`cultural_layer_config.json`): Defines layer properties and zoom levels for tile generation
 
@@ -90,7 +90,7 @@ Companion tool to tippecanoe for merging multiple MBTiles files into a single co
 
 ## Database Schema Setup
 
-The `cultural.sql` file creates an extensive set of materialized views, indexes, and optimized data structures. Here's a detailed breakdown:
+These four files (`cultural-core.sql`, `transportation.sql`, `transportation-railway.sql`, `infrastructure.sql`) together create an extensive set of materialized views, indexes, and optimized data structures. Here's a detailed breakdown:
 
 ### Index Creation Strategy
 

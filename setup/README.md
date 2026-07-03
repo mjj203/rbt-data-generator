@@ -79,10 +79,10 @@ rbt schema run highway
 | `landcover` | physical | `physical/landcover.sql` | Landcover polygon and label views |
 | `water` | physical | `physical/water-features.sql` | Water bodies, waterways, and water labels |
 | `contour` | physical | `physical/terrain.sql` | Contour and glacier-contour zoom views |
-| `cultural` | cultural | `cultural/cultural-core.sql` | Core cultural views (aeroway, buildings, boundaries, places) |
-| `highway` | cultural | `cultural/transportation.sql` | Roads, ferries, and ports |
-| `railway` | cultural | `cultural/transportation-railway.sql` | Railways and stations |
-| `aero` | cultural | `cultural/infrastructure.sql` | Utility and infrastructure views (dams, powerlines, pipelines) |
+| `cultural` | cultural | `cultural/cultural-core.sql` | Core cultural views (boundaries, buildings, places, cemeteries, ports, utilities, military) |
+| `highway` | cultural | `cultural/transportation.sql` | Road network views (highway zoom variants) |
+| `railway` | cultural | `cultural/transportation-railway.sql` | Railways, stations, and yard labels |
+| `aero` | cultural | `cultural/infrastructure.sql` | Aviation views (airports, heliports, runways, aeroway surfaces) |
 
 For the lowest-level escape hatch, the SQL files can still be fed to `psql` by hand from their own directory, but `rbt schema run` adds `ON_ERROR_STOP`, per-unit logs under `output/logs/`, and the resolved connection environment.
 

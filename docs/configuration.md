@@ -91,7 +91,7 @@ These five are resolved independently by both sides using identical rules (`Sett
 | `OSM_CLEANUP_ON_EXIT` | Bash | `true` | Remove temp files on exit. |
 | `OSM_VALIDATE_DOWNLOADS` | Bash | `true` | Size-check downloaded files. |
 | `OSM_MIN_PBF_SIZE_MB` | Bash | `50000` | Minimum acceptable PBF size in MB for `OSM_VALIDATE_DOWNLOADS`'s sanity check. Planet-sized floor by default so a truncated planet download is caught; lower it (e.g. `10`) when importing a small regional extract. |
-| `OSM_HEALTH_CHECK_PORT` | Unused | `8080` | Not read anywhere; `rbt health` (the Docker `HEALTHCHECK`) takes no port argument. |
+| `OSM_HEALTH_CHECK_PORT` | Unused | `8080` | Referenced only in a no-op log message in `import-osm-data.sh` (`start_health_check_server`); not functionally used. `rbt health` (the Docker `HEALTHCHECK`) takes no port argument. |
 
 ### Shared script settings
 
@@ -114,8 +114,36 @@ These five are resolved independently by both sides using identical rules (`Sett
 |---|---|---|---|
 | `DISK_SPACE_REQUIRED_GB` | Python | `100` | `rbt validate` pre-flight check minimum. |
 | `MEMORY_REQUIRED_GB` | Python | `16` | `rbt validate` pre-flight check minimum. |
-| `HEALTH_CHECK_PORT` | Unused | `8080` | Not read anywhere; `rbt health` takes no port argument. |
+| `HEALTH_CHECK_PORT` | Unused | `8080` | Referenced only in a no-op log message in `import-osm-data.sh` (as a fallback for `OSM_HEALTH_CHECK_PORT`); not functionally used. `rbt health` takes no port argument. |
 | `HEALTH_CHECK_INTERVAL` | Unused | `30` | Not read anywhere; the Docker `HEALTHCHECK interval` is set in `Dockerfile.production` instead. |
+
+## Layer registry validation
+
+[`config/layers.yml`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/layers.yml) is strictly validated when `load_registry()` parses it
+(`src/rbt/layers.py`), not just loosely typed — malformed registries fail
+fast with a `LayerRegistryError` instead of surfacing as confusing runtime
+errors deep in tile generation. Checks include:
+
+- **Missing required fields** — every layer needs `source_table`; every
+  projection needs `epsg`; every `gdal_mvt` source table needs `target`,
+  `minzoom`, and `maxzoom`.
+- **Unknown projection codes** — a layer's `projections:` list must only
+  reference codes declared under the top-level `projections:` section.
+- **Dangling category references** — every layer key listed under
+  `categories.<type>.<category>` must exist under that layer type.
+- **Malformed `gdal_mvt` groups** — each entry under
+  `gdal_mvt.datasets.<type>.groups.<category>.<table>` is validated the same
+  way as a schema field, so a typo'd `minzoom` fails immediately.
+
+See the schema comment at the top of `config/layers.yml` (`:1-29`) for the
+full per-layer field reference. Example error for a layer referencing an
+undeclared projection:
+
+```
+rbt.layers.LayerRegistryError: layer 'building' (cultural): references
+unknown projection(s) ['9999'] — declare them under the 'projections'
+section first
+```
 
 ## Backward compatibility
 

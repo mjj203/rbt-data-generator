@@ -74,8 +74,10 @@ rbt setup --import-buildings
 rbt --debug setup --import-reference-data
 
 # The importer leaf scripts honor SCRIPT_* variables from config/rbt.conf;
-# override per run to preserve temp files for inspection
-SCRIPT_CLEAN_TEMP_FILES=false SCRIPT_DEBUG=true rbt import osm -- --all
+# override per run to preserve temp files for inspection. Note: the OSM
+# importer is the one exception — it honors OSM_CLEANUP_ON_EXIT, not
+# SCRIPT_CLEAN_TEMP_FILES (which the buildings/geonames/reference importers use).
+OSM_CLEANUP_ON_EXIT=false SCRIPT_DEBUG=true rbt import osm -- --all
 ```
 
 ## Tile generation issues

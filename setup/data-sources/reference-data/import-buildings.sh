@@ -351,7 +351,7 @@ ingest_overture_buildings_impl() {
     log_progress "This may take a significant amount of time due to data size..."
     
     if ! aws s3 sync --no-sign-request \
-        "s3://overturemaps-us-west-2/release/2025-05-21.0/theme=buildings/" \
+        "s3://overturemaps-us-west-2/release/2026-06-17.0/theme=buildings/" \
         . \
         --only-show-errors \
         --cli-read-timeout 0 \

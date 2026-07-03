@@ -180,17 +180,20 @@ and carry the same ODbL terms as OSM itself.
   Required attribution: "© OpenStreetMap contributors, Overture Maps
   Foundation".
 - **Download mechanism:** `aws s3 sync --no-sign-request` against
-  `s3://overturemaps-us-west-2/release/2025-05-21.0/theme=buildings/`,
+  `s3://overturemaps-us-west-2/release/2026-06-17.0/theme=buildings/`,
   then `ogr2ogr` loads `type=building` and `type=building_part` GeoParquet
   into `overture.building` / `overture.buildingpart`. An alternative
   high-throughput path, `tools/duckdb-building-export.sql` (see
   [DuckDB Buildings Export](duckdb-buildings.md)), reads the GeoParquet
-  directly with DuckDB and exports FlatGeoBuf — that script currently
-  references release `2025-08-20.1`.
-- **Update cadence:** Overture publishes versioned releases roughly monthly.
-  This pipeline pins a specific release; bumping it is a deliberate change to
-  the importer (and the DuckDB script, which should reference the same
-  release).
+  directly with DuckDB and exports FlatGeoBuf — both scripts are pinned to
+  the same release.
+- **Update cadence:** Overture publishes versioned releases roughly monthly
+  and only retains a rolling window of recent releases on the public S3
+  bucket (older releases 404 once superseded) — verify with `aws s3 ls
+  --no-sign-request --region us-west-2 s3://overturemaps-us-west-2/release/`
+  before pinning a new one. Bumping the release is a deliberate change that
+  must update **both** the importer and the DuckDB script together, since
+  they are expected to reference the same release.
 - **Feeds:** the `building` layer (`rbt.building`, plus the area-filtered
   `rbt.building_z10/z11/z12` zoom variants used by the 4326 backend).
 

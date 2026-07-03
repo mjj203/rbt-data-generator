@@ -27,6 +27,15 @@ pip install -r requirements-docs.txt && pip install -e .
 mkdocs serve
 ```
 
+## Documentation
+
+`docs/cli.md` is **regenerated at every `mkdocs build`** by
+[`docs/_hooks/gen_cli_reference.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/docs/_hooks/gen_cli_reference.py),
+which shells out to `python -m typer rbt.cli utils docs` against the live
+Typer app. Edit CLI help text in `src/rbt/cli.py` / `src/rbt/commands/*.py`
+— never edit `docs/cli.md` directly, since `mkdocs build` (and CI) will
+overwrite it.
+
 ## Architecture rule
 
 **Only the `rbt` CLI dispatches.** No bash script calls Python; no bash script
