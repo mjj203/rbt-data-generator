@@ -2,6 +2,46 @@
 
 All notable changes to this project are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `rbt osm run` previously launched `imposm run` with only the committed
+  `imposm-config.json` — replication settings, but no `connection`,
+  `mapping`, `cachedir`, or `diffdir` — so the continuous update supervisor
+  could not actually apply diffs. It now merges those values from `Settings`
+  into a generated runtime config (a private 0600 temp file removed on exit),
+  keeping the database password out of the long-running process's argv and
+  logs. `srid` is included as well (imposm defaults to 3857; this pipeline
+  imports at 4326).
+- OSM state (planet PBF, imposm cache, replication/diff state) now persists.
+  The compose services and Helm chart mounted cache volumes at `/app/cache`,
+  which nothing reads, while actual state went to the code's ephemeral
+  `/mnt/*` defaults — lost on every container/pod restart. Compose, the Helm
+  chart, and the container image now set `OSM_DATA_DIR` / `OSM_CACHE_DIR` /
+  `OSM_DIFF_DIR` to `/app/output/osm/{data,cache,diff}` on the shared output
+  volume, which also lets `rbt osm run` see the imposm cache produced by
+  `rbt setup --all` (required for diff application).
+
+### Changed
+- **Helm chart 0.2.0 (breaking values change):** the dead `cache.*` values,
+  the `-setup-cache`/`-osm-cache` PVC templates, and their claim helpers were
+  removed; new `config.osmDataDir` / `config.osmCacheDir` / `config.osmDiffDir`
+  values feed the env ConfigMap. Existing cache PVCs were never written to and
+  can be deleted after upgrading. The postgres StatefulSet gained a
+  `startupProbe` so long crash recovery on large databases no longer risks
+  liveness kills.
+- `Dockerfile.production` bakes the `OSM_*_DIR` defaults into the image so
+  bare `docker run` matches compose and the chart. Anyone mounting volumes at
+  the old `/mnt/*` defaults must now set the `OSM_*_DIR` vars explicitly. The
+  unused `/app/cache` directory is no longer created.
+- `charts/.../files/postgresql.conf` was re-synced with the canonical
+  `config/postgresql.conf`, and a parity test now fails CI if the chart's
+  mirrored config files drift again.
+
+### Removed
+- `GENERATE_ALL_PROJECTIONS` from `env.example` — nothing ever read it
+  (projection selection is `rbt tiles --projection`).
+
 ## [0.2.0] - 2026-07-03
 
 ### Added

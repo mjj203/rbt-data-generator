@@ -152,15 +152,10 @@ This bootstraps the database natively (no shell scripts): it creates the `rbt` d
 
 === "Docker"
 
-    The container can only see paths under the mounted `./output` directory, so place the extract at `./output/osm/data/planet.osm.pbf` on the host and override the OSM paths:
+    The container keeps OSM state under the mounted `./output` directory (compose sets `OSM_DATA_DIR=/app/output/osm/data`), so place the extract at `./output/osm/data/planet.osm.pbf` on the host and run:
 
     ```bash
-    docker compose --profile setup run --rm \
-      -e OSM_DATA_DIR=/app/output/osm/data \
-      -e OSM_CACHE_DIR=/app/output/osm/cache \
-      -e OSM_DIFF_DIR=/app/output/osm/diff \
-      -e OSM_CONNECTION="postgis://rbt_user:rbt_password@postgres/rbt?prefix=NONE" \
-      rbt-setup rbt import osm --stage import
+    docker compose --profile setup run --rm rbt-setup rbt import osm --stage import
     ```
 
 This runs `imposm import` with the project's mapping (`setup/data-sources/osm/imposm-mapping.yaml`), writing OSM tables in EPSG:4326 (`OSM_SRID`) and recording diff state so replication can pick up later.

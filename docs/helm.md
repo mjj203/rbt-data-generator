@@ -10,9 +10,27 @@ daemon, and optional TileServer-GL and Prometheus.
 - Kubernetes 1.25+ and Helm 3.8+.
 - The rbt image published to a registry (defaults to
   `ghcr.io/mjj203/rbt-data-generator`; Helm does not build images).
-- A **ReadWriteMany** StorageClass for the shared output volume, which the
-  setup, osm-updates, tiles, smoke, and tile-server workloads all mount.
+- A **ReadWriteMany** StorageClass for the shared output volume (tiles, logs,
+  and OSM state), which the setup, osm-updates, tiles, smoke, and tile-server
+  workloads all mount.
 - amd64 worker nodes for the rbt workloads (the image ships an x86-64 imposm3).
+
+## Storage and OSM state
+
+OSM state — the planet PBF, imposm's cache, and replication/diff state — lives
+on the shared output volume under `config.osmDataDir` / `config.osmCacheDir` /
+`config.osmDiffDir` (defaults: `/app/output/osm/{data,cache,diff}`). It must
+stay on a persistent mount shared by the setup job and the OSM updater:
+`rbt osm run` applies diffs against the imposm cache produced by
+`rbt setup --all`. Size `output.persistence.size` accordingly — a full planet
+needs roughly 500Gi–1Ti of headroom on top of tile output. If your RWX backend
+(e.g. NFS) is slow for imposm's LevelDB cache, point `config.osmCacheDir` at
+faster storage.
+
+!!! note "Upgrading from chart 0.1.x"
+    The unused `cache.*` values and the `-setup-cache` / `-osm-cache` PVCs were
+    removed in chart 0.2.0. No workload ever wrote to those volumes; delete any
+    leftover PVCs after upgrading.
 
 ## Component toggles
 

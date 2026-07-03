@@ -81,9 +81,9 @@ grow.
 
 | Component | Location (config) | Size |
 |---|---|---|
-| OSM planet PBF | `OSM_DATA_DIR` (default `/mnt/data`) | ~80 GB and growing |
-| imposm3 cache | `OSM_CACHE_DIR` (default `/mnt/cache`) | ~100 – 200 GB |
-| OSM diffs | `OSM_DIFF_DIR` (default `/mnt/diff`) | small; grows with the update window |
+| OSM planet PBF | `OSM_DATA_DIR` (containers: `/app/output/osm/data`; bare code default `/mnt/data`) | ~80 GB and growing |
+| imposm3 cache | `OSM_CACHE_DIR` (containers: `/app/output/osm/cache`; bare code default `/mnt/cache`) | ~100 – 200 GB |
+| OSM diffs | `OSM_DIFF_DIR` (containers: `/app/output/osm/diff`; bare code default `/mnt/diff`) | small; grows with the update window |
 | PostgreSQL cluster | server data directory | ~1 – 2 TB after all imports, indexes, and materialized views |
 | FlatGeoBuf exports + MBTiles + 4326 tile dirs | `TILE_CACHE_DIR` (default `./output/tiles`) | ~200 – 500 GB |
 | tippecanoe scratch | `TILE_TEMP_DIR` (default `/tmp/tiles`) | tens of GB, transient |

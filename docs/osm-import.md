@@ -234,7 +234,7 @@ the same setting)
 - `replication_interval`: Updates every 24 hours  
 - `diff_state_before`: Buffer time before current state (24 hours)
 
-Note: Additional configuration such as the database connection, mapping file, and cache directories is passed to imposm as command-line arguments built from `Settings` (`OSM_CONNECTION`, `OSM_MAPPING_FILE`, `OSM_CACHE_DIR`, `OSM_DIFF_DIR`, `OSM_SRID`) rather than living in this configuration file.
+Note: Additional configuration such as the database connection, mapping file, and cache directories comes from `Settings` (`OSM_CONNECTION`, `OSM_MAPPING_FILE`, `OSM_CACHE_DIR`, `OSM_DIFF_DIR`, `OSM_SRID`) rather than living in this file. The one-shot import stages pass these to imposm as command-line arguments; `rbt osm run` instead merges them with the replication settings above into a generated runtime config file (a private temp file, removed when the supervisor exits) so the database password never appears in the long-running process's argv.
 
 ### imposm-mapping.yaml
 
@@ -493,7 +493,10 @@ These apply to the native importer (`src/rbt/importers/osm.py`) behind
 Set in `config/rbt.conf` (the `OSM_*` section) or override via environment:
 
 ```bash
-OSM_DATA_DIR        # Data storage directory (default: /mnt/data)
+OSM_DATA_DIR        # Data storage directory (code default: /mnt/data; the
+                    # container image, compose, and Helm chart set the OSM_*_DIR
+                    # vars to /app/output/osm/* so state persists on the shared
+                    # output volume)
 OSM_CONFIG_FILE     # Imposm config file
 OSM_MAPPING_FILE    # Imposm mapping file
 OSM_CACHE_DIR       # Imposm cache directory
