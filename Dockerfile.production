@@ -160,6 +160,14 @@ COPY --from=python-builder     /opt/rbt-venv /opt/rbt-venv
 # Expose the Python CLI on PATH.
 ENV PATH="/opt/rbt-venv/bin:${PATH}"
 
+# OSM state (planet PBF, imposm cache, replication/diff state) defaults to the
+# persistent /app/output volume, matching compose and the Helm chart. The
+# code's built-in /mnt/* defaults are ephemeral container paths; override
+# these vars to relocate.
+ENV OSM_DATA_DIR=/app/output/osm/data \
+    OSM_CACHE_DIR=/app/output/osm/cache \
+    OSM_DIFF_DIR=/app/output/osm/diff
+
 WORKDIR /app
 
 COPY config/ ./config/
@@ -167,13 +175,13 @@ COPY setup/ ./setup/
 COPY tools/ ./tools/
 
 RUN find ./tools -name "*.sh" -exec chmod +x {} \; \
-    && mkdir -p output/logs output/tiles cache \
+    && mkdir -p output/logs output/tiles \
     && groupadd --system rbt \
     && useradd --system --gid rbt --home-dir /app --shell /usr/sbin/nologin rbt \
     && chown -R rbt:rbt /app
 
 # Run as a non-root user. Any host/named volumes mounted for writable paths
-# (output/, cache/, and the OSM /mnt/* data dirs) must be writable by this uid.
+# (output/, including the OSM_*_DIR state under it) must be writable by this uid.
 USER rbt
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \

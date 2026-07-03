@@ -56,6 +56,15 @@ spec:
               mountPath: /etc/postgresql/postgresql.conf
               subPath: postgresql.conf
               readOnly: true
+          # Crash recovery on a planet-scale database can take minutes before
+          # postgres accepts connections; the startup probe (up to 5 minutes)
+          # holds off liveness kills during that window.
+          startupProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.config.pgUser | quote }}, "-d", {{ .Values.config.pgDatabase | quote }}]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           livenessProbe:
             exec:
               command: ["pg_isready", "-U", {{ .Values.config.pgUser | quote }}, "-d", {{ .Values.config.pgDatabase | quote }}]
