@@ -2,10 +2,8 @@
 
 Ad-hoc utilities that run outside the main setup/production pipelines.
 
-| Script | Purpose |
-|---|---|
-| [overture_building_processing.sh](overture_building_processing.sh) | Processes Overture building data with DuckDB and exports area-filtered building tables to FlatGeoBuf in multiple projections and zoom levels. |
-| [duckdb-building-export.sql](duckdb-building-export.sql) | The DuckDB SQL driven by the script above — an alternative Overture building export path that avoids ogr2ogr for the first pass. |
+There are currently no scripts here — the former bash utilities have been
+ported to the native `rbt` CLI (see below).
 
 ## Where did the check scripts go?
 
@@ -28,15 +26,19 @@ rbt health
 docker compose exec rbt-tiles rbt health
 ```
 
-## Running the Overture utilities
+## Overture buildings DuckDB export
+
+The former `overture_building_processing.sh` wrapper has been retired. The
+DuckDB → FlatGeobuf export is now a native command:
 
 ```bash
-# Requires duckdb on PATH; see the script header for tunables
-OUTPUT_DIR=/data ./tools/overture_building_processing.sh
+# Requires duckdb on PATH
+rbt export buildings
 ```
 
-Key environment variables: `OUTPUT_DIR` (default `/data`),
+Key environment variables: `OVERTURE_EXPORT_DIR` (default `./output/buildings`),
 `DUCKDB_MEMORY_LIMIT` (default `200GB`), `DUCKDB_MAX_TEMP_SIZE`
-(default `2900GB`), `CLEANUP_TEMP_FILES` (default `true`). See
-[docs/duckdb-buildings.md](../docs/duckdb-buildings.md) for the full
+(default `2900GB`). The DuckDB SQL it drives lives at
+[setup/data-sources/overture/duckdb-building-export.sql](../setup/data-sources/overture/duckdb-building-export.sql).
+See [docs/duckdb-buildings.md](../docs/duckdb-buildings.md) for the full
 workflow.

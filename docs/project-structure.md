@@ -52,12 +52,11 @@ rbt-data-generator/
 │       └── gdal_mvt.py          # EPSG:4326 backend (GDAL MVT driver — no tippecanoe)
 ├── setup/data-sources/          # Importer configuration + SQL schema sources
 │   ├── osm/                     # imposm-config.json + imposm-mapping.yaml
+│   ├── overture/                # duckdb-building-export.sql (run via `rbt export buildings`)
 │   └── schemas/                 # 8 PL/pgSQL files that create the rbt.* views (run via `rbt schema`)
 │       ├── physical/            # physical-core, landcover, water-features, terrain
 │       └── cultural/            # cultural-core, transportation, transportation-railway, infrastructure
-├── tools/                       # Standalone utilities
-│   ├── overture_building_processing.sh  # Wrapper: fetch Overture release → DuckDB export
-│   └── duckdb-building-export.sql       # DuckDB SQL: Overture buildings → FlatGeoBuf
+├── tools/                       # Standalone utilities (docs pointers; bash scripts retired)
 ├── tests/                       # pytest suite (fake_repo / recorded_run fixtures in conftest.py)
 │   └── fixtures/                # Seed SQL + committed Liechtenstein .osm.pbf for the nightly run
 ├── docs/                        # This MkDocs Material site
@@ -124,11 +123,11 @@ The bash that used to live here (`setup/init-database.sh`,
 retired after the [Parity Runbook](parity-runbook.md) verification — and,
 most recently, the four leaf importers under `setup/data-sources/` with
 their shared bash helper library and the `src/rbt/bash.py` delegate) has been
-**deleted**; its functionality lives in `rbt setup`, `rbt import`, `rbt osm`,
-`rbt validate|smoke|health`, and `rbt schema`.
-`tools/overture_building_processing.sh` (a standalone utility outside the
-runtime path) is intentionally kept; see
-[`tools/README.md`](https://github.com/MJJ203/rbt-data-generator/blob/main/tools/README.md).
+**deleted**; its functionality lives in `rbt setup`, `rbt import`, `rbt export`,
+`rbt osm`, `rbt validate|smoke|health`, and `rbt schema`. The last bash holdout,
+`tools/overture_building_processing.sh`, is now `rbt export buildings` (its
+DuckDB SQL lives at `setup/data-sources/overture/duckdb-building-export.sql`);
+see [`tools/README.md`](https://github.com/MJJ203/rbt-data-generator/blob/main/tools/README.md).
 
 ### Tile engine backends
 

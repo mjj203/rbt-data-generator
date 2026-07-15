@@ -26,6 +26,7 @@ from rich.console import Console
 
 from . import __version__
 from .commands import checks as checks_commands
+from .commands.export import export_app
 from .commands.importers import importers_app
 from .commands.layers import layers_app
 from .commands.osm import osm_app
@@ -50,6 +51,7 @@ app.add_typer(tiles_app, name="tiles")
 app.add_typer(osm_app, name="osm")
 app.add_typer(setup_app, name="setup")
 app.add_typer(importers_app, name="import")
+app.add_typer(export_app, name="export")
 app.add_typer(layers_app, name="layers")
 app.add_typer(schema_app, name="schema")
 checks_commands.register(app)

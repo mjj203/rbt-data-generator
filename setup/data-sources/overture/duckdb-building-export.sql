@@ -9,15 +9,28 @@ INSTALL httpfs;
 LOAD spatial;
 LOAD httpfs;
 
--- Set DuckDB configuration from environment variables with fallback defaults
-SET max_temp_directory_size = coalesce(getenv('DUCKDB_MAX_TEMP_SIZE'), '2900GB');
+-- Set DuckDB configuration from environment variables with fallback defaults.
+-- DuckDB's getenv() returns '' (not NULL) for an unset variable, so wrap every
+-- lookup in nullif(..., '') — otherwise coalesce sees the empty string, the
+-- default never fires, and e.g. `SET memory_limit = ''` errors. `rbt export
+-- buildings` always sets all of these; the fallbacks are for a bare
+-- `duckdb -f` run with only OUTPUT_DIR set.
+SET max_temp_directory_size = coalesce(nullif(getenv('DUCKDB_MAX_TEMP_SIZE'), ''), '2900GB');
 SET preserve_insertion_order = false;
-SET temp_directory = coalesce(getenv('DUCKDB_TEMP_DIRECTORY'), coalesce(getenv('OUTPUT_DIR'), '/data'));
-SET memory_limit = coalesce(getenv('DUCKDB_MEMORY_LIMIT'), '200GB');
+SET temp_directory = coalesce(nullif(getenv('DUCKDB_TEMP_DIRECTORY'), ''), nullif(getenv('OUTPUT_DIR'), ''), '/data');
+SET memory_limit = coalesce(nullif(getenv('DUCKDB_MEMORY_LIMIT'), ''), '200GB');
+-- Region is tied to the public Overture bucket below; if you point
+-- OVERTURE_S3_BUCKET at a bucket in another region, change this to match.
 SET s3_region='us-west-2';
 
 -- Set output directory from environment variable (defaults to /data if not set)
-SET VARIABLE output_dir = coalesce(getenv('OUTPUT_DIR'), '/data');
+SET VARIABLE output_dir = coalesce(nullif(getenv('OUTPUT_DIR'), ''), '/data');
+-- Bucket and release come from the environment (set by `rbt export buildings`
+-- from OVERTURE_S3_BUCKET / OVERTURE_RELEASE) so the DuckDB path stays in
+-- lockstep with the PostGIS importer. rtrim drops any trailing slash on the
+-- bucket so the concatenated path never doubles it.
+SET VARIABLE s3_bucket = rtrim(coalesce(nullif(getenv('OVERTURE_S3_BUCKET'), ''), 's3://overturemaps-us-west-2'), '/');
+SET VARIABLE overture_release = coalesce(nullif(getenv('OVERTURE_RELEASE'), ''), '2026-06-17.0');
 -- Create the main building table by joining building and building_part data
 -- Note: We perform a LEFT JOIN to include all buildings, even those without parts
 CREATE OR REPLACE TABLE rbt_building AS
@@ -30,10 +43,10 @@ SELECT
     b.height,
     ST_Area(ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:3857')) AS area,
     b.geometry
-FROM read_parquet('s3://overturemaps-us-west-2/release/2026-06-17.0/theme=buildings/type=building/*', filename=true, hive_partitioning=1) b
+FROM read_parquet(getvariable('s3_bucket') || '/release/' || getvariable('overture_release') || '/theme=buildings/type=building/*', filename=true, hive_partitioning=1) b
 LEFT JOIN (
-    SELECT DISTINCT building_id 
-    FROM read_parquet('s3://overturemaps-us-west-2/release/2026-06-17.0/theme=buildings/type=building_part/*', filename=true, hive_partitioning=1)
+    SELECT DISTINCT building_id
+    FROM read_parquet(getvariable('s3_bucket') || '/release/' || getvariable('overture_release') || '/theme=buildings/type=building_part/*', filename=true, hive_partitioning=1)
 ) bp ON b.id = bp.building_id;
 
 CREATE OR REPLACE TABLE rbt_building_label AS

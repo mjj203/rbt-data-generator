@@ -99,8 +99,12 @@ All of these are now read by `Settings`; the ones marked *(previously bash-only)
 
 | Variable | Owner | Default | Purpose |
 |---|---|---|---|
-| `OVERTURE_RELEASE` | Python *(new)* | `2026-06-17.0` | Overture Maps release synced by `rbt import buildings` (override per run with `--release`). Keep in sync with `tools/duckdb-building-export.sql`; Overture retains only a rolling window of releases on the public bucket. |
+| `OVERTURE_RELEASE` | Python *(new)* | `2026-06-17.0` | Overture Maps release used by both `rbt import buildings` (PostGIS) and `rbt export buildings` (DuckDB), so a single value pins both paths (override per run with `--release`). Overture retains only a rolling window of releases on the public bucket. |
 | `OVERTURE_S3_BUCKET` | Python *(new)* | `s3://overturemaps-us-west-2/` | Public Overture S3 bucket (synced with `aws s3 sync --no-sign-request`). |
+| `OVERTURE_EXPORT_DIR` | Python *(new)* | `./output/buildings` | Output directory for the `rbt export buildings` FlatGeobuf files (override per run with `--output-dir`). |
+| `DUCKDB_MEMORY_LIMIT` | Python *(new)* | `200GB` | DuckDB memory ceiling for `rbt export buildings`; lower it (e.g. `16GB`) on smaller machines. |
+| `DUCKDB_MAX_TEMP_SIZE` | Python *(new)* | `2900GB` | DuckDB max temp-directory size for `rbt export buildings`. |
+| `DUCKDB_TEMP_DIRECTORY` | Python *(new)* | `$OVERTURE_EXPORT_DIR` | DuckDB spill directory for `rbt export buildings`. |
 
 ### Shared settings
 

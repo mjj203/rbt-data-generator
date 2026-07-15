@@ -28,11 +28,15 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: shellcheck
+        # --no-run-if-empty: the repo may legitimately contain zero shell
+        # scripts (the bash importers/wrappers have all been ported to the
+        # native `rbt` CLI); without it, an empty `find` makes `xargs` run
+        # shellcheck with no arguments, which exits non-zero under pipefail.
         run: |
           set -euxo pipefail
           find tools \
             -type f -name "*.sh" -print0 \
-            | xargs -0 shellcheck --severity=warning --external-sources
+            | xargs -0 --no-run-if-empty shellcheck --severity=warning --external-sources
 
   sql-lint:
     runs-on: ubuntu-latest
@@ -43,10 +47,10 @@ jobs:
           python-version: "3.13"
       - name: Install sqlfluff
         run: pip install "sqlfluff>=3.0"
-      # tools/duckdb-building-export.sql is DuckDB SQL (INSTALL/LOAD extensions,
-      # SET VARIABLE), not Postgres — linting it under --dialect postgres is a
-      # parse failure, not a real finding, so it's excluded from this target
-      # rather than counted as a "legacy" violation.
+      # setup/data-sources/overture/duckdb-building-export.sql is DuckDB SQL
+      # (INSTALL/LOAD extensions, SET VARIABLE), not Postgres — linting it under
+      # --dialect postgres is a parse failure, not a real finding. It sits
+      # outside this target (setup/data-sources/schemas) and so is never linted.
       #
       # setup/data-sources/schemas still has real, unremediated style findings
       # (spacing, capitalization, keyword-as-identifier, CREATE INDEX

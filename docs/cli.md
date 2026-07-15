@@ -41,6 +41,7 @@ $ rbt [OPTIONS] COMMAND [ARGS]...
 * `osm`: Continuous OSM updates and diff management.
 * `setup`: Database initialization helpers.
 * `import`: Run individual data importers (OSM,...
+* `export`: Export standalone data artifacts (Overture...
 * `layers`: Inspect the declarative layer registry.
 * `schema`: Run database schema SQL (rbt.* views).
 
@@ -93,7 +94,7 @@ Generate Mapbox Vector Tiles from the RBT database.
 **Usage**:
 
 ```console
-$ rbt tiles [OPTIONS] COMMAND [ARGS]...
+$ rbt tiles [OPTIONS] [COMMAND] [ARGS]...
 ```
 
 **Options**:
@@ -244,7 +245,7 @@ Database initialization helpers.
 **Usage**:
 
 ```console
-$ rbt setup [OPTIONS] COMMAND [ARGS]...
+$ rbt setup [OPTIONS] [COMMAND] [ARGS]...
 ```
 
 **Options**:
@@ -348,6 +349,42 @@ $ rbt import buildings [OPTIONS]
 
 * `--skip-parts`: Skip the optional building_part ingest.
 * `--release TEXT`: Overture release to sync (default: pinned in Settings).
+* `--dry-run`
+* `--help`: Show this message and exit.
+
+## `rbt export`
+
+Export standalone data artifacts (Overture buildings → FlatGeobuf).
+
+**Usage**:
+
+```console
+$ rbt export [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `buildings`: Export Overture buildings directly to...
+
+### `rbt export buildings`
+
+Export Overture buildings directly to FlatGeobuf via DuckDB (no PostGIS).
+
+**Usage**:
+
+```console
+$ rbt export buildings [OPTIONS]
+```
+
+**Options**:
+
+* `--output-dir PATH`: Directory for the .fgb outputs (default: $OVERTURE_EXPORT_DIR).
+* `--release TEXT`: Overture release to read (default: pinned in Settings).
+* `--keep-db`: Keep the temporary DuckDB database after a successful run.
 * `--dry-run`
 * `--help`: Show this message and exit.
 

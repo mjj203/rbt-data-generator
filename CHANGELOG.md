@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `rbt export buildings` — a native command for the DuckDB → FlatGeobuf Overture
+  buildings export, finishing the bash retirement. It removes any prior outputs,
+  runs the DuckDB script (`duckdb -f`), validates all six `building_*.fgb`
+  outputs are present and non-empty, and drops the scratch database on success
+  (kept on failure for debugging; `--keep-db` retains it). Flags: `--output-dir`,
+  `--release`, `--keep-db`, `--dry-run`. New settings `OVERTURE_EXPORT_DIR`,
+  `DUCKDB_MEMORY_LIMIT`, `DUCKDB_MAX_TEMP_SIZE`, `DUCKDB_TEMP_DIRECTORY`.
+
+### Changed
+- The DuckDB export SQL now reads `OVERTURE_RELEASE` / `OVERTURE_S3_BUCKET` at
+  run time instead of hardcoding the release inline, so the DuckDB and PostGIS
+  Overture paths stay pinned to the same release with no manual lockstep. The
+  SQL moved from `tools/duckdb-building-export.sql` to
+  `setup/data-sources/overture/duckdb-building-export.sql`.
+
+### Removed
+- `tools/overture_building_processing.sh` (the last bash script) — superseded by
+  `rbt export buildings`.
+
 ## [0.2.1] - 2026-07-03
 
 ### Fixed

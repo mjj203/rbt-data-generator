@@ -47,6 +47,7 @@ REQUIRED_TOOLS: dict[str, str] = {
 OPTIONAL_TOOLS: dict[str, str] = {
     "sqlite3": "SQLite database utility",
     "docker": "Docker containerization",
+    "duckdb": "DuckDB CLI (Overture buildings FlatGeobuf export)",
 }
 
 # Project-relative paths `_check_project_structure` expects to exist.

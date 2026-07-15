@@ -122,7 +122,16 @@ FAKE_IMPOSM_CONFIG = """\
 }
 """
 
-_SCRUBBED_ENV_PREFIXES = ("PG", "DATABASE_", "RBT_", "OSM_", "TILE_", "SHARED_")
+_SCRUBBED_ENV_PREFIXES = (
+    "PG",
+    "DATABASE_",
+    "RBT_",
+    "OSM_",
+    "TILE_",
+    "SHARED_",
+    "OVERTURE_",
+    "DUCKDB_",
+)
 
 
 @pytest.fixture(autouse=True)
