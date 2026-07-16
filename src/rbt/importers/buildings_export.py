@@ -17,6 +17,7 @@ export always regenerates; there is no "skip if present" short-circuit.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from .. import process
@@ -87,6 +88,18 @@ def export_buildings(
             cmd, retries=1, delay=settings.retry_delay, env=env, log_file=log_file, dry_run=True
         )
         return
+
+    # Verify the tool and script are actually usable *before* touching any
+    # existing artifacts — a container missing the duckdb CLI (or a bad
+    # OVERTURE_EXPORT_SQL override) must not delete a prior successful run's
+    # outputs on its way to failing.
+    if shutil.which("duckdb") is None:
+        raise FileNotFoundError(
+            "duckdb CLI not found on PATH — install DuckDB "
+            "(see docs/duckdb-buildings.md) before running this export"
+        )
+    if not sql_path.is_file():
+        raise FileNotFoundError(f"DuckDB export SQL script not found: {sql_path}")
 
     out.mkdir(parents=True, exist_ok=True)
     temp_dir.mkdir(parents=True, exist_ok=True)

@@ -22,6 +22,15 @@ All notable changes to this project are documented in this file. The format is b
   Overture paths stay pinned to the same release with no manual lockstep. The
   SQL moved from `tools/duckdb-building-export.sql` to
   `setup/data-sources/overture/duckdb-building-export.sql`.
+- `Dockerfile.production` now bundles a pinned, checksum-verified DuckDB CLI
+  (`DUCKDB_VERSION` build arg) in the `runtime` stage, so `rbt export
+  buildings` runs in the published container — previously the image had no
+  `duckdb` binary at all, so the command could only ever fail there. The image
+  build itself runs `duckdb --version` as a smoke test, failing the build
+  immediately on a broken/wrong-architecture binary. `export_buildings()` also
+  now checks that `duckdb` is on `PATH` and the export SQL file exists
+  *before* deleting any prior run's outputs, instead of discovering a missing
+  tool only after destroying them.
 
 ### Removed
 - `tools/overture_building_processing.sh` (the last bash script) — superseded by

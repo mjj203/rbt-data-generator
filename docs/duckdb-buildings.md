@@ -103,15 +103,31 @@ ST_Intersects(...)` (or a bounding-box comparison) clause to the
 
 ## Requirements
 
-- **DuckDB**: CLI (no minimum version pinned by the scripts; `v1.0.0`+ is known to work — see the install command below)
+- **DuckDB**: CLI, already bundled in the production container image
+  (`Dockerfile.production` installs a pinned, checksum-verified release —
+  see [Container Image](#container-image) below). Running `rbt export
+  buildings` outside that image (bare metal, a different container) requires
+  installing DuckDB yourself — see Installation below.
 - **DuckDB Extensions**: `spatial`, `httpfs` (auto-installed by the SQL script via `INSTALL`/`LOAD`)
 - **Memory**: sized to `DUCKDB_MEMORY_LIMIT` (default assumes 200GB+ available; lower it for smaller machines)
 - **Storage**: several hundred GB free for the temp directory and output files on a full global run
 - **Network**: stable internet connection for S3 access
 
+## Container Image
+
+`Dockerfile.production` downloads a pinned DuckDB CLI release (`DUCKDB_VERSION`
+build arg, matched against a `DUCKDB_SHA256_AMD64`/`DUCKDB_SHA256_ARM64`
+checksum) into `/usr/local/bin/duckdb` in the `runtime` stage, and the image
+build itself runs `duckdb --version` as a smoke test — a corrupted or
+wrong-architecture binary fails the `docker build` immediately rather than
+only being discovered the first time `rbt export buildings` runs in
+production. `rbt validate`/`rbt smoke` also report whether `duckdb` is on
+`PATH` (it is listed as an optional tool, since only this one export path
+needs it).
+
 ## Installation
 
-### Installing DuckDB
+### Installing DuckDB (outside the container image)
 
 **macOS:**
 ```bash
@@ -120,7 +136,7 @@ brew install duckdb
 
 **Linux:**
 ```bash
-wget https://github.com/duckdb/duckdb/releases/download/v1.0.0/duckdb_cli-linux-amd64.zip
+wget https://github.com/duckdb/duckdb/releases/download/v1.5.4/duckdb_cli-linux-amd64.zip
 unzip duckdb_cli-linux-amd64.zip
 sudo mv duckdb /usr/local/bin/
 ```

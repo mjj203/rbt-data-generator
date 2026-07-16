@@ -7,6 +7,8 @@ driven by a fake run that materializes the output files the way DuckDB would.
 
 from __future__ import annotations
 
+import dataclasses
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -19,6 +21,15 @@ from rbt.config import Settings, load_settings
 from rbt.importers.buildings_export import OUTPUT_FILES, export_buildings
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _duckdb_on_path(monkeypatch):
+    """Real-run tests exercise the Python logic only, via a fully monkeypatched
+    process.run_with_retry — they must not depend on the actual `duckdb`
+    binary being installed on the machine running the test suite (it usually
+    isn't, in CI)."""
+    monkeypatch.setattr(shutil, "which", lambda name: f"/usr/bin/{name}")
 
 
 def _settings(out: Path) -> Settings:
@@ -167,6 +178,64 @@ def test_dry_run_preserves_existing_outputs(tmp_path: Path, recorded_run) -> Non
 # ---------------------------------------------------------------------------
 # Real-run behavior (validation + scratch-db cleanup)
 # ---------------------------------------------------------------------------
+
+
+def test_missing_duckdb_binary_raises_without_deleting_existing_outputs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Regression test: a container without the duckdb CLI installed must fail
+    *before* deleting a prior successful run's outputs, not after."""
+    out = tmp_path / "out"
+    out.mkdir()
+    existing = {name: (out / name) for name in OUTPUT_FILES}
+    for path in existing.values():
+        path.write_bytes(b"prior-run-data")
+    (out / "overture_buildings.db").write_bytes(b"prior-run-db")
+
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    called = False
+
+    def fake(cmd, **kwargs):
+        nonlocal called
+        called = True
+        return subprocess.CompletedProcess(list(cmd), 0, "", "")
+
+    monkeypatch.setattr(rbt.process, "run_with_retry", fake)
+
+    with pytest.raises(FileNotFoundError, match="duckdb"):
+        export_buildings(_settings(out))
+
+    assert not called  # never even attempted to run duckdb
+    for path in existing.values():
+        assert path.read_bytes() == b"prior-run-data"
+    assert (out / "overture_buildings.db").read_bytes() == b"prior-run-db"
+
+
+def test_missing_sql_file_raises_without_deleting_existing_outputs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    out = tmp_path / "out"
+    out.mkdir()
+    stale = out / OUTPUT_FILES[0]
+    stale.write_bytes(b"prior-run-data")
+
+    settings = dataclasses.replace(
+        _settings(out), overture_export_sql=tmp_path / "does-not-exist.sql"
+    )
+    called = False
+
+    def fake(cmd, **kwargs):
+        nonlocal called
+        called = True
+        return subprocess.CompletedProcess(list(cmd), 0, "", "")
+
+    monkeypatch.setattr(rbt.process, "run_with_retry", fake)
+
+    with pytest.raises(FileNotFoundError, match="does-not-exist.sql"):
+        export_buildings(settings)
+
+    assert not called
+    assert stale.read_bytes() == b"prior-run-data"
 
 
 def test_success_validates_and_removes_scratch_db(tmp_path: Path, monkeypatch) -> None:
