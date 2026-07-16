@@ -104,7 +104,7 @@ All of these are now read by `Settings`; the ones marked *(previously bash-only)
 | `OVERTURE_EXPORT_DIR` | Python *(new)* | `./output/buildings` | Output directory for the `rbt export buildings` FlatGeobuf files (override per run with `--output-dir`). |
 | `DUCKDB_MEMORY_LIMIT` | Python *(new)* | `200GB` | DuckDB memory ceiling for `rbt export buildings`; lower it (e.g. `16GB`) on smaller machines. |
 | `DUCKDB_MAX_TEMP_SIZE` | Python *(new)* | `2900GB` | DuckDB max temp-directory size for `rbt export buildings`. |
-| `DUCKDB_TEMP_DIRECTORY` | Python *(new)* | `$OVERTURE_EXPORT_DIR` | DuckDB spill directory for `rbt export buildings`. |
+| `DUCKDB_TEMP_DIRECTORY` | Python *(new)* | `$OVERTURE_EXPORT_DIR` | DuckDB spill directory for `rbt export buildings`. Per-run, `--output-dir` carries this along with it unless `--temp-dir` is also given (see [DuckDB Buildings Export](duckdb-buildings.md)). |
 
 ### Shared settings
 

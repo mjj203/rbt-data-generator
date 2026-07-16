@@ -10,8 +10,11 @@ All notable changes to this project are documented in this file. The format is b
   runs the DuckDB script (`duckdb -f`), validates all six `building_*.fgb`
   outputs are present and non-empty, and drops the scratch database on success
   (kept on failure for debugging; `--keep-db` retains it). Flags: `--output-dir`,
-  `--release`, `--keep-db`, `--dry-run`. New settings `OVERTURE_EXPORT_DIR`,
-  `DUCKDB_MEMORY_LIMIT`, `DUCKDB_MAX_TEMP_SIZE`, `DUCKDB_TEMP_DIRECTORY`.
+  `--temp-dir`, `--release`, `--keep-db`, `--dry-run`. `--output-dir` carries
+  DuckDB's spill directory along with it by default (both can reach hundreds of
+  GB); `--temp-dir` splits them onto separate disks when needed. New settings
+  `OVERTURE_EXPORT_DIR`, `DUCKDB_MEMORY_LIMIT`, `DUCKDB_MAX_TEMP_SIZE`,
+  `DUCKDB_TEMP_DIRECTORY`.
 
 ### Changed
 - The DuckDB export SQL now reads `OVERTURE_RELEASE` / `OVERTURE_S3_BUCKET` at

@@ -102,6 +102,55 @@ def test_release_argument_overrides_settings(fake_repo: Path, recorded_run) -> N
     assert call["env"]["OVERTURE_RELEASE"] == "2030-12-31.0"
 
 
+def test_output_dir_override_carries_temp_dir_along(
+    fake_repo: Path, recorded_run, tmp_path: Path
+) -> None:
+    """--output-dir alone must move DuckDB's spill directory with it.
+
+    Regression test: DuckDB can spill hundreds of GB, so silently leaving
+    DUCKDB_TEMP_DIRECTORY at the settings default while --output-dir points
+    elsewhere would spill onto the wrong disk.
+    """
+    settings = load_settings()
+    override = tmp_path / "bldg-scratch"
+    assert override != settings.duckdb_temp_dir  # precondition: genuinely different
+
+    export_buildings(settings, output_dir=override, dry_run=True)
+
+    [call] = recorded_run.calls
+    assert call["cmd"][1] == str(override / "overture_buildings.db")
+    assert call["env"]["OUTPUT_DIR"] == str(override)
+    assert call["env"]["DUCKDB_TEMP_DIRECTORY"] == str(override)
+
+
+def test_explicit_temp_dir_overrides_output_dir_default(
+    fake_repo: Path, recorded_run, tmp_path: Path
+) -> None:
+    """--temp-dir wins even when --output-dir is also given (split disks)."""
+    settings = load_settings()
+    out_override = tmp_path / "bldg-out"
+    temp_override = tmp_path / "bldg-scratch"
+
+    export_buildings(settings, output_dir=out_override, temp_dir=temp_override, dry_run=True)
+
+    [call] = recorded_run.calls
+    assert call["env"]["OUTPUT_DIR"] == str(out_override)
+    assert call["env"]["DUCKDB_TEMP_DIRECTORY"] == str(temp_override)
+
+
+def test_temp_dir_alone_does_not_move_output_dir(
+    fake_repo: Path, recorded_run, tmp_path: Path
+) -> None:
+    settings = load_settings()
+    temp_override = tmp_path / "bldg-scratch"
+
+    export_buildings(settings, temp_dir=temp_override, dry_run=True)
+
+    [call] = recorded_run.calls
+    assert call["env"]["OUTPUT_DIR"] == str(settings.overture_export_dir)
+    assert call["env"]["DUCKDB_TEMP_DIRECTORY"] == str(temp_override)
+
+
 def test_dry_run_preserves_existing_outputs(tmp_path: Path, recorded_run) -> None:
     out = tmp_path / "out"
     out.mkdir()
@@ -178,3 +227,38 @@ def test_cli_export_buildings_dry_run(fake_repo: Path, recorded_run) -> None:
     [call] = recorded_run.calls
     assert call["cmd"][0] == "duckdb"
     assert call["dry_run"] is True
+
+
+def test_cli_output_dir_flag_moves_temp_dir(fake_repo: Path, recorded_run, tmp_path: Path) -> None:
+    out = tmp_path / "cli-out"
+    result = runner.invoke(
+        app, ["--no-log-file", "export", "buildings", "--output-dir", str(out), "--dry-run"]
+    )
+    assert result.exit_code == 0, result.output
+    [call] = recorded_run.calls
+    assert call["env"]["OUTPUT_DIR"] == str(out)
+    assert call["env"]["DUCKDB_TEMP_DIRECTORY"] == str(out)
+
+
+def test_cli_temp_dir_flag_overrides_output_dir(
+    fake_repo: Path, recorded_run, tmp_path: Path
+) -> None:
+    out = tmp_path / "cli-out"
+    temp = tmp_path / "cli-scratch"
+    result = runner.invoke(
+        app,
+        [
+            "--no-log-file",
+            "export",
+            "buildings",
+            "--output-dir",
+            str(out),
+            "--temp-dir",
+            str(temp),
+            "--dry-run",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    [call] = recorded_run.calls
+    assert call["env"]["OUTPUT_DIR"] == str(out)
+    assert call["env"]["DUCKDB_TEMP_DIRECTORY"] == str(temp)

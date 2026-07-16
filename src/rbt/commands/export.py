@@ -18,6 +18,11 @@ def export_buildings_cmd(
     output_dir: Path | None = typer.Option(
         None, "--output-dir", help="Directory for the .fgb outputs (default: $OVERTURE_EXPORT_DIR)."
     ),
+    temp_dir: Path | None = typer.Option(
+        None,
+        "--temp-dir",
+        help="DuckDB spill directory (default: follows --output-dir, else $DUCKDB_TEMP_DIRECTORY).",
+    ),
     release: str | None = typer.Option(
         None, "--release", help="Overture release to read (default: pinned in Settings)."
     ),
@@ -30,6 +35,7 @@ def export_buildings_cmd(
     buildings_export.export_buildings(
         settings_from_ctx(ctx),
         output_dir=output_dir,
+        temp_dir=temp_dir,
         release=release,
         keep_db=keep_db,
         dry_run=dry_run,

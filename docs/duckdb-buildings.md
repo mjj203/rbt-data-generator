@@ -42,9 +42,10 @@ DUCKDB_MEMORY_LIMIT=64GB rbt export buildings --output-dir /data
 ```
 
 **CLI flags:** `--output-dir` (default `$OVERTURE_EXPORT_DIR`, i.e.
-`./output/buildings`), `--release` (default the pinned `OVERTURE_RELEASE`),
-`--keep-db` (retain the scratch DuckDB database after a successful run),
-`--dry-run` (log the command without running it).
+`./output/buildings`), `--temp-dir` (DuckDB's spill directory; defaults to
+`--output-dir` itself — see below), `--release` (default the pinned
+`OVERTURE_RELEASE`), `--keep-db` (retain the scratch DuckDB database after a
+successful run), `--dry-run` (log the command without running it).
 
 **Environment variables:**
 
@@ -53,6 +54,11 @@ DUCKDB_MEMORY_LIMIT=64GB rbt export buildings --output-dir /data
 - `DUCKDB_MEMORY_LIMIT`: Memory limit (default `200GB` — lower this on smaller machines, see below)
 - `DUCKDB_MAX_TEMP_SIZE`: Max temp directory size (default `2900GB`)
 - `DUCKDB_TEMP_DIRECTORY`: Temporary file directory (default = the export dir)
+
+DuckDB's spill directory follows `--output-dir` by default — both can reach
+hundreds of GB, so passing `--output-dir /mnt/big-disk` alone is enough to
+send both the outputs and DuckDB's spill files there. Pass `--temp-dir`
+explicitly only if you want the two on separate disks.
 
 The scratch DuckDB database is written to `<output-dir>/overture_buildings.db`.
 Note the export **always regenerates** — unlike `rbt import buildings`, it has

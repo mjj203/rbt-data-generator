@@ -383,6 +383,7 @@ $ rbt export buildings [OPTIONS]
 **Options**:
 
 * `--output-dir PATH`: Directory for the .fgb outputs (default: $OVERTURE_EXPORT_DIR).
+* `--temp-dir PATH`: DuckDB spill directory (default: follows --output-dir, else $DUCKDB_TEMP_DIRECTORY).
 * `--release TEXT`: Overture release to read (default: pinned in Settings).
 * `--keep-db`: Keep the temporary DuckDB database after a successful run.
 * `--dry-run`

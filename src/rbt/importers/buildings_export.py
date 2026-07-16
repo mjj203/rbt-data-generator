@@ -41,13 +41,25 @@ def export_buildings(
     settings: Settings,
     *,
     output_dir: Path | None = None,
+    temp_dir: Path | None = None,
     release: str | None = None,
     keep_db: bool = False,
     dry_run: bool = False,
 ) -> None:
     release = release or settings.overture_release
     out = Path(output_dir) if output_dir is not None else settings.overture_export_dir
-    temp_dir = settings.duckdb_temp_dir
+    # DuckDB's spill directory follows --output-dir by default (matching the
+    # retired bash script, which defaulted DUCKDB_TEMP_DIRECTORY to the
+    # effective OUTPUT_DIR) — both can reach hundreds of GB, and defaulting to
+    # settings.duckdb_temp_dir here would silently spill onto the wrong disk
+    # whenever --output-dir points somewhere else. --temp-dir splits them
+    # explicitly when that's actually wanted.
+    if temp_dir is not None:
+        temp_dir = Path(temp_dir)
+    elif output_dir is not None:
+        temp_dir = out
+    else:
+        temp_dir = settings.duckdb_temp_dir
     db_path = out / "overture_buildings.db"
     sql_path = settings.overture_export_sql
 
