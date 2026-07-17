@@ -183,17 +183,16 @@ and carry the same ODbL terms as OSM itself.
   `rbt import buildings --release`), then `ogr2ogr` loads `type=building`
   and `type=building_part` GeoParquet into `overture.building` /
   `overture.buildingpart`. An alternative high-throughput path,
-  `tools/duckdb-building-export.sql` (see
-  [DuckDB Buildings Export](duckdb-buildings.md)), reads the GeoParquet
-  directly with DuckDB and exports FlatGeoBuf — both paths are pinned to
-  the same release.
+  `rbt export buildings` (see [DuckDB Buildings Export](duckdb-buildings.md)),
+  reads the GeoParquet directly with DuckDB and exports FlatGeoBuf — both paths
+  read the same `OVERTURE_RELEASE` at run time, so they are always pinned to the
+  same release.
 - **Update cadence:** Overture publishes versioned releases roughly monthly
   and only retains a rolling window of recent releases on the public S3
   bucket (older releases 404 once superseded) — verify with `aws s3 ls
   --no-sign-request --region us-west-2 s3://overturemaps-us-west-2/release/`
-  before pinning a new one. Bumping the release is a deliberate change that
-  must update **both** the `OVERTURE_RELEASE` default and the DuckDB script
-  together, since they are expected to reference the same release.
+  before pinning a new one. Bumping `OVERTURE_RELEASE` moves both the PostGIS
+  import and the DuckDB export together — there is no separate pin to update.
 - **Feeds:** the `building` layer (`rbt.building`, plus the area-filtered
   `rbt.building_z10/z11/z12` zoom variants used by the 4326 backend).
 

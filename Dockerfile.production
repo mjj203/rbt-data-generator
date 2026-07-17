@@ -17,6 +17,12 @@ ARG TIPPECANOE_REF=2.79.0
 ARG MICROMAMBA_VERSION=2.8.1-0
 ARG PYTHON_VERSION=3.13
 ARG GDAL_VERSION=3.13.1
+ARG DUCKDB_VERSION=1.5.4
+# sha256 of the official duckdb_cli-linux-{amd64,arm64}.zip release assets for
+# DUCKDB_VERSION above — bump both together when bumping the version. Pass
+# `SKIP` to bypass the check (useful for local development only).
+ARG DUCKDB_SHA256_AMD64=1f2fa724fb054b3dbe1a9cbd13de5b76997d850e7087ec762ba88db04e0180cf
+ARG DUCKDB_SHA256_ARM64=377f03fb9f17ab5a78f28f829cbfcb5333da8ab3c2d0788f27694f81df77ed29
 
 # -----------------------------------------------------------------------------
 # Stage 1: base system with PostGIS client tools + a micromamba env providing
@@ -133,7 +139,36 @@ RUN set -eux \
     && rm /tmp/imposm.tar.gz
 
 # -----------------------------------------------------------------------------
-# Stage 4: Python CLI install (builds the rbt wheel)
+# Stage 4: download and verify the DuckDB CLI (used by `rbt export buildings`)
+# -----------------------------------------------------------------------------
+FROM base AS duckdb-fetcher
+
+ARG DUCKDB_VERSION
+ARG DUCKDB_SHA256_AMD64
+ARG DUCKDB_SHA256_ARM64
+
+# Re-declared: SHELL does not carry over from the base stage (see note there).
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN set -eux \
+    && arch="$(uname -m)" \
+    && case "${arch}" in \
+           x86_64)  duckdb_arch=amd64; duckdb_sha256="${DUCKDB_SHA256_AMD64}" ;; \
+           aarch64) duckdb_arch=arm64; duckdb_sha256="${DUCKDB_SHA256_ARM64}" ;; \
+           *) echo "unsupported architecture: ${arch}" >&2; exit 1 ;; \
+       esac \
+    && curl -fsSL -o /tmp/duckdb_cli.zip \
+         "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb_cli-linux-${duckdb_arch}.zip" \
+    && if [ -n "${duckdb_sha256:-}" ] && [ "${duckdb_sha256}" != "SKIP" ]; then \
+           echo "${duckdb_sha256}  /tmp/duckdb_cli.zip" | sha256sum -c -; \
+       fi \
+    && mkdir -p /opt/duckdb \
+    && unzip -q /tmp/duckdb_cli.zip -d /opt/duckdb \
+    && chmod +x /opt/duckdb/duckdb \
+    && rm /tmp/duckdb_cli.zip
+
+# -----------------------------------------------------------------------------
+# Stage 5: Python CLI install (builds the rbt wheel)
 # -----------------------------------------------------------------------------
 FROM base AS python-builder
 
@@ -147,7 +182,7 @@ RUN python3 -m venv /opt/rbt-venv \
     && /opt/rbt-venv/bin/pip install --no-cache-dir .
 
 # -----------------------------------------------------------------------------
-# Stage 5: runtime image
+# Stage 6: runtime image
 # -----------------------------------------------------------------------------
 FROM base AS runtime
 
@@ -155,7 +190,14 @@ COPY --from=tippecanoe-builder /opt/tippecanoe/bin/tippecanoe /usr/local/bin/tip
 COPY --from=tippecanoe-builder /opt/tippecanoe/bin/tile-join /usr/local/bin/tile-join
 COPY --from=tippecanoe-builder /opt/tippecanoe/bin/tippecanoe-decode /usr/local/bin/tippecanoe-decode
 COPY --from=imposm-fetcher     /opt/imposm/imposm /usr/local/bin/imposm
+COPY --from=duckdb-fetcher     /opt/duckdb/duckdb /usr/local/bin/duckdb
 COPY --from=python-builder     /opt/rbt-venv /opt/rbt-venv
+
+# Build-time smoke test: fail the image build immediately if the pinned
+# DuckDB binary is missing, non-executable, or broken (e.g. wrong arch),
+# rather than only discovering it the first time `rbt export buildings`
+# runs in production.
+RUN duckdb --version
 
 # Expose the Python CLI on PATH.
 ENV PATH="/opt/rbt-venv/bin:${PATH}"

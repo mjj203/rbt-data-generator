@@ -102,6 +102,13 @@ class Settings:
     overture_release: str = "2026-06-17.0"
     overture_s3_bucket: str = "s3://overturemaps-us-west-2/"
 
+    # Overture buildings DuckDB → FlatGeobuf export (`rbt export buildings`)
+    overture_export_dir: Path = Path("./output/buildings")
+    overture_export_sql: Path = Path("setup/data-sources/overture/duckdb-building-export.sql")
+    duckdb_memory_limit: str = "200GB"
+    duckdb_max_temp_size: str = "2900GB"
+    duckdb_temp_dir: Path = Path("./output/buildings")
+
     def imposm_connection(self) -> str:
         """imposm's postgis:// connection URL (OSM_CONNECTION override wins).
 
@@ -322,6 +329,7 @@ def load_settings(overrides: dict[str, str] | None = None) -> Settings:
     """
     root = project_root()
     conf_path = root / "config" / "rbt.conf"
+    default_export_dir = str(root / "output" / "buildings")
     overrides = dict(overrides or {})
     expansion_env = {**os.environ, **overrides}
     conf = _read_conf(conf_path, expansion_env)
@@ -337,6 +345,10 @@ def load_settings(overrides: dict[str, str] | None = None) -> Settings:
                 if value:
                     return value
         return default
+
+    # Resolved once so the DuckDB temp directory defaults to the same volume as
+    # the export outputs (both can reach hundreds of GB) unless overridden.
+    export_dir = resolve("OVERTURE_EXPORT_DIR", default=default_export_dir)
 
     settings = Settings(
         database_host=resolve("DATABASE_HOST", "PG_HOST", default="localhost"),
@@ -401,6 +413,18 @@ def load_settings(overrides: dict[str, str] | None = None) -> Settings:
         clean_temp_files=_coerce_bool(resolve("CLEAN_TEMP_FILES"), False),
         overture_release=resolve("OVERTURE_RELEASE", default="2026-06-17.0"),
         overture_s3_bucket=resolve("OVERTURE_S3_BUCKET", default="s3://overturemaps-us-west-2/"),
+        overture_export_dir=Path(export_dir),
+        overture_export_sql=Path(
+            resolve(
+                "OVERTURE_EXPORT_SQL",
+                default=str(
+                    root / "setup" / "data-sources" / "overture" / "duckdb-building-export.sql"
+                ),
+            )
+        ),
+        duckdb_memory_limit=resolve("DUCKDB_MEMORY_LIMIT", default="200GB"),
+        duckdb_max_temp_size=resolve("DUCKDB_MAX_TEMP_SIZE", default="2900GB"),
+        duckdb_temp_dir=Path(resolve("DUCKDB_TEMP_DIRECTORY", default=export_dir)),
     )
 
     return settings

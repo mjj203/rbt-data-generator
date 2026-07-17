@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `rbt export buildings` — a native command for the DuckDB → FlatGeobuf Overture
+  buildings export, finishing the bash retirement. It removes any prior outputs,
+  runs the DuckDB script (`duckdb -f`), validates all six `building_*.fgb`
+  outputs are present and non-empty, and drops the scratch database on success
+  (kept on failure for debugging; `--keep-db` retains it). Flags: `--output-dir`,
+  `--temp-dir`, `--release`, `--keep-db`, `--dry-run`. `--output-dir` carries
+  DuckDB's spill directory along with it by default (both can reach hundreds of
+  GB); `--temp-dir` splits them onto separate disks when needed. New settings
+  `OVERTURE_EXPORT_DIR`, `DUCKDB_MEMORY_LIMIT`, `DUCKDB_MAX_TEMP_SIZE`,
+  `DUCKDB_TEMP_DIRECTORY`.
+
+### Changed
+- The DuckDB export SQL now reads `OVERTURE_RELEASE` / `OVERTURE_S3_BUCKET` at
+  run time instead of hardcoding the release inline, so the DuckDB and PostGIS
+  Overture paths stay pinned to the same release with no manual lockstep. The
+  SQL moved from `tools/duckdb-building-export.sql` to
+  `setup/data-sources/overture/duckdb-building-export.sql`.
+- `Dockerfile.production` now bundles a pinned, checksum-verified DuckDB CLI
+  (`DUCKDB_VERSION` build arg) in the `runtime` stage, so `rbt export
+  buildings` runs in the published container — previously the image had no
+  `duckdb` binary at all, so the command could only ever fail there. The image
+  build itself runs `duckdb --version` as a smoke test, failing the build
+  immediately on a broken/wrong-architecture binary. `export_buildings()` also
+  now checks that `duckdb` is on `PATH` and the export SQL file exists
+  *before* deleting any prior run's outputs, instead of discovering a missing
+  tool only after destroying them.
+
+### Removed
+- `tools/overture_building_processing.sh` (the last bash script) — superseded by
+  `rbt export buildings`.
+
 ## [0.2.1] - 2026-07-03
 
 ### Fixed

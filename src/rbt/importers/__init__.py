@@ -7,6 +7,6 @@ invoked as subprocesses via :mod:`rbt.process`; shared plumbing lives in
 :mod:`rbt.importers._support`.
 """
 
-from . import buildings, geonames, osm, reference
+from . import buildings, buildings_export, geonames, osm, reference
 
-__all__ = ["buildings", "geonames", "osm", "reference"]
+__all__ = ["buildings", "buildings_export", "geonames", "osm", "reference"]
