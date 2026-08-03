@@ -55,7 +55,7 @@ flowchart LR
     s_overture --> rbt_views
     s_rbt_base --> rbt_views
     rbt_views["rbt schema<br>~105 views / materialized views<br>(rbt schema run, 8 SQL units)"]
-    rbt_views --> tiles["rbt tiles<br>tippecanoe (3857 / 3395)<br>GDAL MVT (4326)"]
+    rbt_views --> tiles["rbt tiles<br>tippecanoe (3857 / 3395)"]
 ```
 
 The eight schema units (see `rbt schema list`):
@@ -76,6 +76,23 @@ The eight schema units (see `rbt schema list`):
     `aero` unit's description mentions dams/powerlines (which actually live in
     `cultural-core.sql`), and ferries/ports live in `cultural-core.sql`, not
     `transportation.sql`. The tables below reflect the actual `CREATE VIEW` statements.
+
+!!! note "† marks views with no tile consumer"
+    A **†** in the tables below marks a view that the schema SQL still creates but that no tile
+    layer reads. `config/layers.yml` registers only the *base* view of each family
+    (`rbt.highway`, `rbt.building`, `rbt.contour`, `rbt.landcover`, …) and leaves zoom thinning
+    to tippecanoe — `min_zoom` plus, where per-zoom attribute thresholds are needed, the
+    `filters:` block. That leaves every `*_z<N>` zoom-variant view, and `rbt.water_simplified`,
+    unconsumed. They are still built and queryable; they are simply not tile sources. Where a
+    row covers a base view *and* its variants — e.g. `rbt.highway` (+ `_z4`…`_z12` †) — the
+    marker applies only to the variants, and the `Zoom` column describes the live base layer.
+
+    Two families deliberately carry **no** marker. `rbt.builtuparea_ne`/`_osm` and
+    `rbt.glacier_ne`/`_osm` are not tile sources in their own right, but they still reach tiles
+    through the `rbt.builtuparea` and `rbt.glacier` union views, which are. And
+    `rbt.building_z10`/`z11`/`z12` are not *created* at all — their DDL is commented out (see
+    the warning under [Buildings & land use](#buildings-land-use)), so "creates but nothing
+    reads" does not describe them.
 
 ## Water & hydrography
 
@@ -122,13 +139,13 @@ flowchart LR
 | View | Source | Purpose | Zoom |
 |---|---|---|---|
 | `rbt.water_surface` (matview) | `import.water` | Classified, simplified permanent water polygons | staging |
-| `rbt.water` (matview) | `rbt.water_surface_clean`, `rbt.valid_ocean`, `rbt.sound_ocean` | Combined inland + ocean water; the `water` tile layer | z0–13 (z10+ in 4326; `water_simplified` covers z0–9) |
-| `rbt.water_simplified` (matview) | `rbt.water_surface` (area > 5 km²), `rbt.osm_ocean_simplified` | Low-zoom simplified water | z0–9 (4326) |
+| `rbt.water` (matview) | `rbt.water_surface_clean`, `rbt.valid_ocean`, `rbt.sound_ocean` | Combined inland + ocean water; the `water` tile layer | z0–13 |
+| `rbt.water_simplified` † (matview) | `rbt.water_surface` (area > 5 km²), `rbt.osm_ocean_simplified` | Low-zoom simplified water; no tile consumer — the `water` layer renders `rbt.water` across the whole range | — |
 | `rbt.inland_water_intermittent` (matview) | `import.water` (`intermittent = 't'`) | Seasonal/intermittent water polygons | z8–13 |
 | `rbt.water_surface_label` | `rbt.water_surface`, `rbt.inland_water_intermittent` | Point-on-surface labels for named water | label layer |
-| `rbt.waterway` → `waterway_z8` | `import.waterway` | Rivers, streams, canals (z8 variant: canal/river/stream only) | z6–13 |
+| `rbt.waterway` (+ `waterway_z8` †) | `import.waterway` | Rivers, streams, canals (z8 variant: canal/river/stream only) | z6–13 |
 | `rbt.ne_water_label` | `naturalearth.ne_10m_geography_marine_polys` | Marine name points (oceans, seas) | z0–13 |
-| `rbt.geonames_hydrographic` (+ `_z2`…`_z10`) | `geonames.hydrographic` joined against `rbt.water` | GNS hydrographic name points, area-thresholded per zoom | z1–13 (zoom family) |
+| `rbt.geonames_hydrographic` (+ `_z2`…`_z10` †) | `geonames.hydrographic` joined against `rbt.water` | GNS hydrographic name points, area-thresholded per zoom by `filters.hydrographic` | z1–13 (zoom family) |
 
 ## Terrain & landcover
 
@@ -173,13 +190,13 @@ flowchart LR
 
 | View | Source | Purpose | Zoom |
 |---|---|---|---|
-| `rbt.contour_z8/z10/z12` | `rbt.contour` (base table) | Elevation contours filtered by `nth_line` (10/5/2) | z9–13 (z8/z10/z12 windows in 4326) |
-| `rbt.contour_glacier_z8/z10/z12` | `rbt.contour_glacier` | Glacier contours, same `nth_line` scheme | z9–13 |
+| `rbt.contour_z8/z10/z12` † | `rbt.contour` (base table) | Elevation contours filtered by `nth_line` (10/5/2); no tile consumer — the `contour` layer reads `rbt.contour` directly at z9–13 | — |
+| `rbt.contour_glacier_z8/z10/z12` † | `rbt.contour_glacier` | Glacier contours, same `nth_line` scheme; no tile consumer — the `contour_glacier` layer reads `rbt.contour_glacier` directly at z9–13 | — |
 | `rbt.landcover` (matview) | `import.landcover` | Leaf type/cycle + wetland classification, multipolygon dump | z3–13 |
-| `rbt.landcover_z4/z6/z9/z10` | `rbt.landcover` | Area/subclass-thresholded zoom variants | z4–13 (zoom family) |
-| `rbt.landcover_labels` (+ `_z4/_z6/_z9/_z10`) | `rbt.landcover` | Point-on-surface labels for named landcover | z5–13 |
-| `rbt.builtuparea` | `rbt.builtuparea_ne` ∪ `rbt.builtuparea_osm` | Urban footprints — Natural Earth at low zoom, OSM at high zoom | z3–13 (NE z3–8, OSM z8–13 in 4326) |
-| `rbt.glacier` | `rbt.glacier_ne` ∪ `rbt.glacier_osm` | Glaciated areas + Antarctic ice (NE z0–7, OSM z7–13 in 4326) | z3–13 |
+| `rbt.landcover_z4/z6/z9/z10` † | `rbt.landcover` | Area/subclass-thresholded zoom variants; no tile consumer — the `landcover` layer reads `rbt.landcover` directly | — |
+| `rbt.landcover_labels` (+ `_z4/_z6/_z9/_z10` †) | `rbt.landcover` | Point-on-surface labels for named landcover | z5–13 |
+| `rbt.builtuparea` | `rbt.builtuparea_ne` ∪ `rbt.builtuparea_osm` | Urban footprints — a plain `UNION ALL` of the two matviews with no zoom predicate, so Natural Earth and OSM footprints are both present at every zoom | z3–13 |
+| `rbt.glacier` | `rbt.glacier_ne` ∪ `rbt.glacier_osm` | Glaciated areas + Antarctic ice — likewise a plain `UNION ALL` with no zoom predicate | z3–13 |
 | `rbt.mountain_label` (matview) | `naturalearth.ne_10m_geography_regions_polys` | Mountain-range label lines via `CG_ApproximateMedialAxis` | z6–13 |
 | `rbt.park` | `import.park_polygon` | Parks and protected areas | z3–13 |
 
@@ -235,7 +252,7 @@ flowchart LR
 | `rbt.adm0_lines` | `fieldmap.adm0_lines` | International boundary lines | z0–13 |
 | `rbt.adm1_labels` / `adm1_lines` | `fieldmap.adm1` / `adm1_lines` | State/province labels (point-on-surface) and lines | z3–13 |
 | `rbt.adm2_labels` / `adm2_lines` | `fieldmap.adm2_labels` / `adm2_lines` | County/district labels and lines | z6–13 |
-| `rbt.populated_places` (+ `_z3/_z7/_z9`) | `import.places` (see warning above — should be `import.city_point`) | City/town/village/hamlet points, rank-filtered per zoom (rank < 8 / 11 / 12 / all) | z3–13 (zoom family) |
+| `rbt.populated_places` (+ `_z3/_z7/_z9` †) | `import.places` (see warning above — should be `import.city_point`) | City/town/village/hamlet points, rank-filtered per zoom by `filters.populated_places` (rank < 8 / 11 / 12 / all) | z3–13 (zoom family) |
 | `rbt.us_military_installations` (+ `_labels`) | `mirta.us_military_installations` | US military installation polygons and label points | z6–13 |
 
 ## Transportation
@@ -273,13 +290,13 @@ flowchart LR
 | View | Source | Purpose | Zoom |
 |---|---|---|---|
 | `rbt.highway` (matview) | `import.highway_temp` (from `import.highway` + `fieldmap.usa`) | Roads with US route typing, lifecycle, surface, lanes | z6–13 |
-| `rbt.highway_z4` … `highway_z12` | `rbt.highway` | Subclass-filtered zoom family (motorway/trunk at z4 → residential at z12) | z4–13 (8 variants) |
+| `rbt.highway_z4` … `highway_z12` † | `rbt.highway` | Subclass-filtered zoom family (motorway/trunk at z4 → residential at z12); no tile consumer — the `highway` layer reads `rbt.highway` directly at z6–13 | — (8 variants) |
 | `rbt.railway` (matview) | `import.railway` | Gauge/electrification/track/lifecycle classification with `dps_type` styling key | z6–13 |
-| `rbt.railway_z6` | `rbt.railway` | Excludes yard service tracks (full `railway` takes over at z13) | z6–13 |
-| `rbt.railway_station` / `_label` | `import.transportation_stations` | Station polygons and label points | z10–13 (z9/z11 in 4326) |
+| `rbt.railway_z6` † | `rbt.railway` | Excludes yard service tracks; no tile consumer — the `railway` layer applies the same rule to `rbt.railway` via `filters.railway`, with yards re-admitted at z13 | — |
+| `rbt.railway_station` / `_label` | `import.transportation_stations` | Station polygons and label points | z10–13 |
 | `rbt.yard_label` (matview) | `import.transportation_label` ∪ `import.transportation_stations` | Rail-yard labels with normalized yard size | z10–13 |
 | `rbt.ferry` | `import.shipway_linestring` | Ferry routes | z4–13 |
-| `rbt.lock` / `lock_label` | `import.waterway` / `import.utility_stations_label` | Canal locks and gates | z10–13 (z11+ in 4326) |
+| `rbt.lock` / `lock_label` | `import.waterway` / `import.utility_stations_label` | Canal locks and gates | z10–13 |
 
 ## Aviation & ports
 
@@ -327,7 +344,7 @@ flowchart LR
 | `rbt.runway_curve` | `import.aeroway_linestring` | Runway/taxiway centerlines | z8–13 |
 | `rbt.aeroway_surface` | `import.aerodrome_label_point` (non-points) ∪ `import.aeroway_polygon` | Aerodrome and apron polygons | z8–13 |
 | `rbt.port_surface_enhanced` (matview) | `import.builtup_area` (port/harbour/industrial-port) | Clustered, deduplicated port polygons with rank/overlap flags | staging |
-| `rbt.port_surface` / `port_label` | `rbt.port_surface_enhanced` | Compatibility wrapper and point-on-surface labels | z6–13 (z7+ in 4326) |
+| `rbt.port_surface` / `port_label` | `rbt.port_surface_enhanced` | Compatibility wrapper and point-on-surface labels | z6–13 |
 
 ## Buildings & land use
 
@@ -337,7 +354,7 @@ from the Overture import.
 !!! warning "Building views are currently commented out"
     The `rbt.building` table and `building_z10/z11/z12` zoom views (from `overture.building`,
     area thresholds 5000/2500/1500 m²) are present in `cultural-core.sql` **as commented-out
-    DDL**, while `config/layers.yml` still registers `rbt.building*` as tile sources. Until the
+    DDL**, while `config/layers.yml` still registers `rbt.building` as a tile source. Until the
     DDL is re-enabled, building tiles rely on a pre-existing `rbt.building` table or on the
     [DuckDB export path](duckdb-buildings.md), which applies the same zoom/area thresholds.
 
@@ -361,10 +378,10 @@ flowchart LR
 
 | View | Source | Purpose | Zoom |
 |---|---|---|---|
-| `rbt.building` (+ `_z10/_z11/_z12`) | `overture.building` (+ `buildingpart`) | Building footprints, area-thresholded per zoom (≥ 5000/2500/1500 m²) | z10–13 (zoom family) |
+| `rbt.building` (+ `_z10/_z11/_z12`, commented out) | `overture.building` (+ `buildingpart`) | Building footprints, area-thresholded per zoom by `filters.building` (≥ 5000/2500/1500 m²) | z10–13 |
 | `rbt.cemetery` | `import.builtup_area` (cemetery/graveyard subclasses) | Deduplicated cemetery polygons with religion/denomination | z8–13 |
 | `rbt.cemetery_label` | `rbt.cemetery` | Labels for named or religious cemeteries | z8–13 |
-| `rbt.stadium_surface` / `stadium_labels` | `import.builtup_area` (`sports_centre`, `stadium`) | Stadium polygons and label points | z10–13 (z7+ in 4326) |
+| `rbt.stadium_surface` / `stadium_labels` | `import.builtup_area` (`sports_centre`, `stadium`) | Stadium polygons and label points | z10–13 |
 | `rbt.sports_ground` | `public.park_polygon` (`pitch`) | Sports pitches | not yet a registered tile layer |
 | `rbt.golf_course` | `public.park_polygon` (`golf_course`) | Golf courses | not yet a registered tile layer |
 
@@ -407,17 +424,17 @@ flowchart LR
 
 | View | Source | Purpose | Zoom |
 |---|---|---|---|
-| `rbt.dam_curve` (matview) | `import.waterway` (dam/weir) | Dam crest lines with hard/loose surface classification | z8–13 (z7+ in 4326) |
+| `rbt.dam_curve` (matview) | `import.waterway` (dam/weir) | Dam crest lines with hard/loose surface classification | z8–13 |
 | `rbt.dam_surface` (matview) | `import.water` (dam/weir) | Dam surface polygons | z8–13 |
 | `rbt.dam_label` (matview) | `import.water_label` + intersections with `rbt.water`/`waterway`/`dam_*` | Dam labels, supplemented with synthetic points for unlabeled dams | z8–13 |
-| `rbt.power_station` / `_label` (matviews) | `import.utility_stations` (`class = 'power'`) | Generation/distribution facilities and label points | z10–13 (z8/z9 in 4326) |
+| `rbt.power_station` / `_label` (matviews) | `import.utility_stations` (`class = 'power'`) | Generation/distribution facilities and label points | z10–13 |
 | `rbt.pumping_station` / `_label` (matviews) | `import.utility_stations` (`class != 'power'`) | Pumping/treatment facilities | z10–13 |
 | `rbt.hydrocarbon_field` / `_label` | `import.utility_stations` (oil/wellsite/refinery + trigram name matching) | Oil and gas infrastructure, classified into terminal/refinery/field | z6–13 |
-| `rbt.grain_srf` / `grain_srf_pnt` / `grain_point` / `grain_all_points` | `import.utility_stations` (+ `_label`) | Grain silo polygons and points | z10–13 (z8+ in 4326) |
-| `rbt.powerline` (matview) | `import.utility_linestrings` (power subclasses) | Transmission lines and cables | z8–13 (z9+ in 4326) |
-| `rbt.pipeline` (matview) | `import.utility_linestrings` (man_made/pipeline/seamark) | Pipelines for oil, gas, water | z6–13 (z9+ in 4326) |
-| `rbt.utility_point` (matview, + `_z6`/`_z12`) | `import.utility_stations_label` | Towers, masts, tanks, platforms etc.; zoom variants progressively re-admit poles/towers | z6–13 (zoom family) |
-| `rbt.radar_point` | `import.utility_stations` (`tower_type = 'radar'`) | Radar towers | z8–13 (z7+ in 4326) |
+| `rbt.grain_srf` / `grain_srf_pnt` / `grain_point` / `grain_all_points` | `import.utility_stations` (+ `_label`) | Grain silo polygons and points | z10–13 |
+| `rbt.powerline` (matview) | `import.utility_linestrings` (power subclasses) | Transmission lines and cables | z8–13 |
+| `rbt.pipeline` (matview) | `import.utility_linestrings` (man_made/pipeline/seamark) | Pipelines for oil, gas, water | z6–13 |
+| `rbt.utility_point` (matview, + `_z6`/`_z12` †) | `import.utility_stations_label` | Towers, masts, tanks, platforms etc.; `filters.utility` progressively re-admits poles/towers by zoom | z6–13 (zoom family) |
+| `rbt.radar_point` | `import.utility_stations` (`tower_type = 'radar'`) | Radar towers | z8–13 |
 | `utility.station` (matview) | `utility.power_multipolygon` ∪ `utility.man_made_multipolygon` | Deduplicated station helper (not a tile layer) | helper |
 
 ## Regenerating the schema

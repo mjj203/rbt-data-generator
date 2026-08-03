@@ -12,8 +12,8 @@ RBT Vector Tiles is designed as a two-phase system:
 Both phases are driven by a single entry point — the Python `rbt` CLI
 (`src/rbt/`, [reference](cli.md)). The CLI orchestrates the bash data
 importers, runs the schema SQL, supervises continuous OSM updates, and
-dispatches one of **two native tile backends** depending on the target
-projection:
+generates vector tiles for every supported projection through its
+**native tippecanoe backend**:
 
 ```mermaid
 graph TD
@@ -31,9 +31,8 @@ graph TD
     VIEWS[("rbt.* views &<br/>materialized views")]
     UPD["rbt osm run<br/>imposm diff supervisor"]
 
-    subgraph tiles["rbt tiles — two native backends"]
+    subgraph tiles["rbt tiles — native tippecanoe backend"]
         MERC["EPSG:3857 / 3395<br/>ogr2ogr → FlatGeoBuf → tippecanoe<br/>→ tile-join → MBTiles + BTIS"]
-        MVT["EPSG:4326<br/>single ogr2ogr -f MVT (GDAL driver)<br/>→ tile directory + metadata.json"]
     end
 
     CLI --> importers
@@ -48,7 +47,6 @@ graph TD
     SCHEMA --> VIEWS
     DB --> VIEWS
     VIEWS --> MERC
-    VIEWS --> MVT
 ```
 
 ### Orchestration Rule
@@ -73,7 +71,7 @@ directory tree — kept in one place so it can't drift between documents; the
 summary here is just the shape of the split:
 
 - **`src/rbt/`** — the Python CLI (`cli.py` + `commands/` for the Typer
-  surface, `tiles/` for the two tile-generation backends, `importers/` for
+  surface, `tiles/` for the tile-generation engine, `importers/` for
   the native data importers).
 - **`setup/data-sources/`** — imposm config + mapping and the PL/pgSQL
   schema sources.
@@ -144,7 +142,7 @@ sequenceDiagram
     
     loop On-Demand/Scheduled
         TileGen->>DB: Query optimized rbt.* views
-        TileGen->>Output: MBTiles (3857/3395) + tile directory (4326)
+        TileGen->>Output: MBTiles (3857/3395)
     end
 ```
 
@@ -172,7 +170,7 @@ The `rbt` schema contains optimized materialized views and regular views:
 import.water (raw OSM) 
     → rbt.water_surface (filtered, classified)
     → rbt.water (clustered, merged)
-    → rbt.water_simplified (low-zoom version)
+    → rbt.water_simplified (low-zoom version, no tile consumer today)
 ```
 
 ### Performance Optimizations
@@ -190,12 +188,11 @@ import.water (raw OSM)
 |------------|-----------|----------|------------|
 | Web Mercator | 3857 | Standard web mapping | PostgreSQL → FlatGeoBuf → Tippecanoe → MBTiles (+ BTIS metadata) |
 | World Mercator | 3395 | Better area preservation | PostgreSQL → FlatGeoBuf → Tippecanoe → MBTiles (+ BTIS metadata) |
-| Geographic | 4326 | Latitude/longitude | PostgreSQL → GDAL MVT driver → tile directory (no tippecanoe) |
 
 ### Tile Generation Workflow
 
 `TileEngine` (`src/rbt/tiles/engine.py`) reads the declarative layer registry
-in `config/layers.yml` and selects the backend per projection:
+in `config/layers.yml` and runs the same pipeline for every projection:
 
 ```mermaid
 graph LR
@@ -206,23 +203,26 @@ graph LR
         C --> D["tippecanoe<br/>per layer"] --> E["Per-layer MBTiles"]
         E --> F["tile-join merge"] --> G["type_projection.mbtiles<br/>+ BTIS metadata"]
     end
-    
-    subgraph "EPSG:4326 — GDAL-MVT backend"
-        H["single multi-table<br/>ogr2ogr -f MVT<br/>(CONF json: per-table zoom windows)"]
-        H --> I["tile directory<br/>{z}/{x}/{y}.pbf + metadata.json"]
-    end
 
     A --> B
-    A --> H
 ```
 
-!!! note "Why two backends?"
-    Tippecanoe only understands Web-Mercator-family tiling, so the EPSG:4326
-    dataset is cut directly from PostGIS by GDAL's MVT driver in **one**
-    multi-table `ogr2ogr` call. Its `CONF` json maps zoom-variant view
-    families (e.g. `rbt.contour_z8` … `rbt.contour`) onto a single target MVT
-    layer with per-table zoom windows. The output is a tile *directory*, not
-    an MBTiles file, and tile-join/BTIS do not apply.
+!!! note "Zoom-variant views have no tile consumer"
+    The zoom-variant view families — `rbt.contour_z8`/`z10`/`z12` and
+    `rbt.contour_glacier_z8`/`z10`/`z12`, `rbt.highway_z4` … `rbt.highway_z12`,
+    `rbt.railway_z6`, the `landcover_z*` and `landcover_labels_z*` families,
+    `rbt.geonames_hydrographic_z2` … `z10`, `rbt.populated_places_z3`/`z7`/`z9`,
+    `rbt.utility_point_z6`/`z12` — are still created by the schema SQL, as is
+    `rbt.water_simplified`. No tile layer in `config/layers.yml` reads them
+    today: each layer exports its base view and does per-zoom selection with
+    tippecanoe zoom ranges and filters.
+
+    Two things that look like they belong on that list but do not:
+    `rbt.builtuparea_ne`/`_osm` and `rbt.glacier_ne`/`_osm` are not layer
+    sources either, but they still reach tiles through the `rbt.builtuparea`
+    and `rbt.glacier` union views, which are. And `rbt.building_z10` … `z12`
+    are not created at all — their DDL is commented out in `cultural-core.sql`
+    alongside `rbt.building`'s.
 
 ### Layer Processing Strategy
 
@@ -248,8 +248,8 @@ All configuration is centralized in the `config/` directory:
 ```
 config/
 ├── rbt.conf              # Runtime settings (database, processing, tile generation)
-├── layers.yml            # Declarative layer registry: layers, schema SQL units,
-│                         #   and the gdal_mvt (EPSG:4326) dataset definitions
+├── layers.yml            # Declarative layer registry: layers, tippecanoe
+│                         #   filters, projections, and schema SQL units
 ├── postgresql.conf       # PostgreSQL server tuning (mounted into the postgres
 │                         #   container and loaded via a `command: -c config_file=...` override)
 ├── tile-server.json      # TileServer-GL data sources
@@ -349,8 +349,7 @@ output/logs/
 
 output/tiles/<type>/<projection>/
 ├── <layer>_<projection>.log       # Per-layer export + tippecanoe log
-├── merge_<projection>.log         # tile-join log
-└── <type>_4326_mvt.log            # GDAL-MVT backend log
+└── merge_<projection>.log         # tile-join log
 ```
 
 ### Error Handling

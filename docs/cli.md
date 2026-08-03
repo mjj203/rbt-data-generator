@@ -100,7 +100,7 @@ $ rbt tiles [OPTIONS] [COMMAND] [ARGS]...
 **Options**:
 
 * `--layer-type [physical|cultural|all]`: [default: all]
-* `--projection [3857|3395|4326|all]`: [default: all]
+* `--projection [3857|3395|all]`: [default: all]
 * `--all`: Generate every layer in every projection.
 * `--tile-join / --no-tile-join`: [default: tile-join]
 * `--add-btis / --no-btis`: [default: add-btis]
@@ -147,7 +147,7 @@ $ rbt tiles layer [OPTIONS] LAYER_KEY
 
 **Options**:
 
-* `--projection [3857|3395|4326|all]`: [default: 3857]
+* `--projection [3857|3395|all]`: [default: 3857]
 * `--dry-run`
 * `--force`: Re-export cached FlatGeoBuf files.
 * `--help`: Show this message and exit.

@@ -241,7 +241,7 @@ jobs:
       - name: Dry-run validation (rbt CLI)
         run: |
           ~/.local/bin/uv run rbt --no-log-file tiles --layer-type physical --projection 3857 --water --dry-run
-          ~/.local/bin/uv run rbt --no-log-file tiles --layer-type cultural --projection 4326 --building --dry-run
+          ~/.local/bin/uv run rbt --no-log-file tiles --layer-type cultural --projection 3857 --building --dry-run
           ~/.local/bin/uv run rbt --no-log-file schema run --all --dry-run
       - name: Verify psql connectivity to the service container
         run: |
@@ -362,14 +362,3 @@ jobs:
           crs="$(sqlite3 "$mbtiles" "SELECT value FROM metadata WHERE name='crs'")"
           test "$crs" = "EPSG:3857"
           tippecanoe-decode --stats "$mbtiles" | grep -q '"building"'
-      - name: Generate water tiles (EPSG:4326, GDAL MVT backend)
-        run: |
-          ~/.local/bin/uv run rbt --no-log-file tiles \
-            --layer-type physical --projection 4326 --water
-      - name: Verify EPSG:4326 tile directory output
-        run: |
-          set -euxo pipefail
-          tile_dir=output/tiles/physical/4326/physical_tiles
-          test -d "$tile_dir"
-          test -f "$tile_dir/metadata.json"
-          grep -q 'EPSG:4326' "$tile_dir/metadata.json"

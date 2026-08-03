@@ -33,6 +33,40 @@ All notable changes to this project are documented in this file. The format is b
   tool only after destroying them.
 
 ### Removed
+- **BREAKING** — the EPSG:4326 GDAL-MVT tile-directory output backend.
+  `src/rbt/tiles/gdal_mvt.py` is gone, along with the `gdal_mvt:` and
+  `projections.4326:` blocks of `config/layers.yml`, the `MvtConfig` /
+  `MvtDataset` / `MvtSourceTable` registry types, and the `4326` choice on
+  `--projection`. Tile output is now MBTiles from tippecanoe exclusively
+  (EPSG:3857 and EPSG:3395) — no `{z}/{x}/{y}.pbf` directories, no
+  `metadata.json`, no `<type>_4326_mvt.log`.
+
+    `rbt tiles --projection 4326` and `rbt tiles layer <key> --projection 4326`
+    now exit 2 with an invalid-value error. **`--projection all` is the default
+    for `rbt tiles`, and it — along with `--all` — now means 3857 + 3395**, so an
+    unchanged invocation produces two projections instead of three. That includes
+    `Dockerfile.production`'s `CMD ["rbt", "tiles", "--all"]` and the Helm tiles
+    Job: neither needed a change, but both now write two projections. Anything
+    downstream that reads `output/tiles/<type>/4326/` will find nothing.
+
+    **Unaffected:** EPSG:4326 remains the database and import SRID. `OSM_SRID`
+    still defaults to `4326` and the imposm import path is untouched; every
+    `::geometry(..., 4326)` cast in the `rbt.*` schema SQL stands; the
+    `water-polygons-split-4326` / `coastlines-split-4326` downloads and the
+    importers' `-a_srs`/`-t_srs EPSG:4326` are unchanged; and the DuckDB Overture
+    export still writes `building*_4326.fgb` via `rbt export buildings`.
+
+    One consequence worth knowing: 38 views the removed backend consumed as
+    per-zoom windows are still created by the schema SQL but are no longer read
+    by any tile layer — the `contour_z*`, `contour_glacier_z*`, `highway_z*`,
+    `landcover_z*`, `landcover_labels_z*`, `geonames_hydrographic_z*`,
+    `populated_places_z7`/`_z9`, `railway_z6` and `utility_point_z6`/`_z12`
+    families, plus `water_simplified`. The live tile layers export the base
+    views and do their per-zoom selection with tippecanoe zoom ranges and
+    filters instead. Retiring the orphaned views is a separate decision.
+    (`builtuparea_ne`/`_osm` and `glacier_ne`/`_osm` are *not* affected — they
+    still reach tiles through the `rbt.builtuparea` and `rbt.glacier` union
+    views, which are live layer sources.)
 - `tools/overture_building_processing.sh` (the last bash script) — superseded by
   `rbt export buildings`.
 

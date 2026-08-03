@@ -3,12 +3,12 @@
 -- =============================================================================
 -- Minimal stand-in for the rbt.water view produced by
 -- setup/data-sources/schemas/physical/water-features.sql: a handful of small
--- multipolygon "lakes" spread across the globe, enough for tippecanoe (3857)
--- and the GDAL MVT driver (4326) to emit non-empty tiles.
+-- multipolygon "lakes" spread across the globe, enough for tippecanoe
+-- (3857/3395) to emit non-empty tiles.
 --
--- The EPSG:4326 gdal_mvt dataset (config/layers.yml) reads both
--- rbt.water_simplified (z0-9) and rbt.water (z10-13), so both tables are
--- created here.
+-- rbt.water_simplified is created alongside rbt.water as a low-zoom stand-in.
+-- It has no tile consumer since the EPSG:4326 backend was removed (the `water`
+-- tile layer reads rbt.water at z0-13), but the schema SQL still defines it.
 
 CREATE EXTENSION IF NOT EXISTS postgis;
 

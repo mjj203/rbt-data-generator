@@ -4,7 +4,7 @@ name: Nightly integration
 # `integration-tiles` job in ci.yml covers the tile backends against synthetic
 # seed tables; this workflow covers the real pipeline — imposm import of the
 # committed Liechtenstein fixture, schema processing, and tile generation in
-# all three projections — plus a probe of small live upstream data sources.
+# both projections — plus a probe of small live upstream data sources.
 #
 # Trigger manually with: gh workflow run nightly.yml
 
@@ -169,22 +169,6 @@ jobs:
           crs="$(sqlite3 "$mbtiles" "SELECT value FROM metadata WHERE name='crs'")"
           test "$crs" = "EPSG:3395"
           tippecanoe-decode --stats "$mbtiles" | grep -q '"water"'
-      - name: Generate physical tiles (EPSG:4326, GDAL MVT backend)
-        run: |
-          ~/.local/bin/uv run rbt --no-log-file tiles \
-            --layer-type physical --projection 4326 --water --landcover
-      - name: Verify EPSG:4326 tile directory
-        run: |
-          set -euxo pipefail
-          tile_dir=output/tiles/physical/4326/physical_tiles
-          test -f "$tile_dir/metadata.json"
-          grep -q 'EPSG:4326' "$tile_dir/metadata.json"
-          grep -q '"water"' "$tile_dir/metadata.json"
-          grep -q '"landcover"' "$tile_dir/metadata.json"
-          pbf_count="$(find "$tile_dir" -name '*.pbf' | wc -l)"
-          echo "4326 tiles: $pbf_count"
-          test "$pbf_count" -gt 0
-          find "$tile_dir" -name '*.pbf' | awk -F/ '{print $(NF-2)}' | sort -n | uniq -c
       - name: Generate cultural tiles (EPSG:3857, highway + railway)
         # --layer, not --transportation: that category also selects ferry/port/
         # lock views created only by the `cultural` schema unit, which cannot

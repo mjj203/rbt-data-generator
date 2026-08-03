@@ -30,7 +30,7 @@ rbt-data-generator/
 │   │   ├── checks.py            # `rbt validate|health|smoke`
 │   │   └── _common.py           # Shared Typer option/enum plumbing
 │   ├── config.py                # Frozen Settings dataclass + load_settings()
-│   ├── layers.py                # layers.yml loader → Layer / LayerRegistry / MvtConfig (+ LayerRegistryError)
+│   ├── layers.py                # layers.yml loader → Layer / LayerRegistry (+ LayerRegistryError)
 │   ├── paths.py                 # project_root() discovery (RBT_PROJECT_ROOT, then walk up)
 │   ├── logging.py               # Rich console logging + optional file tee
 │   ├── process.py               # run() / run_with_retry() subprocess helpers (dry-run aware)
@@ -44,12 +44,11 @@ rbt-data-generator/
 │   │   ├── geonames.py          # `rbt import geonames` — NGA GNS + USGS GNIS
 │   │   └── buildings.py         # `rbt import buildings` — Overture Maps buildings (S3 + ogr2ogr)
 │   └── tiles/                   # Tile generation engine
-│       ├── engine.py            # TileEngine — picks the backend per projection
+│       ├── engine.py            # TileEngine — drives the pipeline per projection
 │       ├── exporter.py          # ogr2ogr → FlatGeoBuf (3857/3395)
 │       ├── tippecanoe.py        # tippecanoe command construction (3857/3395)
 │       ├── tile_join.py         # Merges per-layer MBTiles into one file
-│       ├── btis.py              # BTIS metadata injection into MBTiles
-│       └── gdal_mvt.py          # EPSG:4326 backend (GDAL MVT driver — no tippecanoe)
+│       └── btis.py              # BTIS metadata injection into MBTiles
 ├── setup/data-sources/          # Importer configuration + SQL schema sources
 │   ├── osm/                     # imposm-config.json + imposm-mapping.yaml
 │   ├── overture/                # duckdb-building-export.sql (run via `rbt export buildings`)
@@ -99,12 +98,24 @@ process). Its sections:
 | `cultural:` / `physical:` | One entry per layer: `source_table` (a `rbt.*` view), zoom window, projections, ogr2ogr and tippecanoe options, attribute type coercions. | `exporter.py`, `tippecanoe.py` |
 | `categories` | Category → layer-key groupings backing the CLI flags (`--water`, `--transportation`, …). | `rbt tiles` option parsing |
 | `schemas` | The 8 SQL schema units under `setup/data-sources/schemas/` with keys for `rbt schema run`. | `schema.py` |
-| `gdal_mvt` | The EPSG:4326 datasets: source table → target MVT layer + per-table zoom window. Zoom-variant views (`rbt.highway_z4` … `rbt.highway`) blend into one target layer. | `gdal_mvt.py` |
-| `projections` | EPSG codes, tile origins, and zoom-0 dimensions for 3857 / 3395 / 4326. | both tile backends |
+| `projections` | EPSG codes, tile origins, and zoom-0 dimensions for 3857 / 3395. | `TileEngine`, `exporter.py`, `btis.py` |
 
 Inspect it interactively with `rbt layers list` and `rbt layers show KEY`.
 Adding a layer means adding YAML here (plus, usually, a view in a schema SQL
 file) — not writing code.
+
+!!! note "Views the schema creates but no layer reads"
+    The `*_z<N>` zoom-variant views —
+    `rbt.contour_z8`/`z10`/`z12`, `rbt.contour_glacier_z8`/`z10`/`z12`,
+    `rbt.landcover_z4`…`z10` and `rbt.landcover_labels_z4`…`z10`,
+    `rbt.highway_z4`…`z12`, `rbt.railway_z6`, `rbt.utility_point_z6`/`z12`,
+    `rbt.waterway_z8`, `rbt.geonames_hydrographic_z2`…`z10`,
+    `rbt.populated_places_z3`/`z7`/`z9` — plus `rbt.water_simplified` are still
+    created by the schema SQL, but no entry in `layers.yml` names them as a
+    `source_table`, so no tile layer reads them today. The
+    `rbt.builtuparea_ne`/`_osm` and `rbt.glacier_ne`/`_osm` materialized views
+    are not layer sources either, but they still feed the `rbt.builtuparea` and
+    `rbt.glacier` views that are.
 
 ### The CLI → external-tool boundary
 
@@ -129,15 +140,13 @@ their shared bash helper library and the `src/rbt/bash.py` delegate) has been
 DuckDB SQL lives at `setup/data-sources/overture/duckdb-building-export.sql`);
 see [`tools/README.md`](https://github.com/MJJ203/rbt-data-generator/blob/main/tools/README.md).
 
-### Tile engine backends
+### Tile engine pipeline
 
-[`src/rbt/tiles/engine.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/src/rbt/tiles/engine.py) selects a backend per
-projection:
-
-| Projection | Backend | Pipeline | Output |
-|---|---|---|---|
-| 3857, 3395 | tippecanoe | `ogr2ogr` → FlatGeoBuf (cached, `--force` re-exports) → `tippecanoe` per layer → `tile-join` merge → BTIS metadata | `<layer>_<proj>.mbtiles` per layer + merged `<type>_<proj>.mbtiles` |
-| 4326 | GDAL MVT driver | **One** multi-table `ogr2ogr -f MVT` call whose `CONF` json maps each source table to a target layer with a zoom window. Tippecanoe is not involved; tile-join/BTIS do not apply. | A tile *directory* (`{z}/{x}/{y}.pbf`) + `metadata.json` |
+[`src/rbt/tiles/engine.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/src/rbt/tiles/engine.py) runs the same pipeline for
+every supported projection — EPSG:3857 and EPSG:3395: `ogr2ogr` → FlatGeoBuf
+(cached, `--force` re-exports) → `tippecanoe` per layer → `tile-join` merge →
+BTIS metadata. Each layer yields `<layer>_<proj>.mbtiles`, and the merge step
+yields one `<type>_<proj>.mbtiles` per layer type.
 
 ### Where logs and outputs land
 
@@ -154,8 +163,7 @@ output/
     │   │   ├── water_3857.mbtiles   # per-layer tippecanoe output
     │   │   ├── water_3857.log       # per-layer command log
     │   │   └── physical_3857.mbtiles  # tile-join merge (+ BTIS metadata)
-    │   └── 4326/
-    │       └── physical_tiles/      # GDAL-MVT directory + metadata.json
+    │   └── 3395/                    # same shape as 3857
     └── cultural/…
 ```
 
@@ -185,7 +193,7 @@ the fastest way to learn what the pipeline actually executes.
 ## Suggested first-week reading order
 
 1. **`config/layers.yml`** plus `rbt layers list` — learn the vocabulary:
-   layers, categories, filters, projections, the `gdal_mvt` datasets.
+   layers, categories, filters, projections.
 2. **`rbt --help`** and [`src/rbt/commands/tiles.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/src/rbt/commands/tiles.py) — see how
    the command surface maps options onto engine calls via a normalized
    `TileRequest`. Try a `rbt tiles --water --projection 3857 --dry-run`.
@@ -194,8 +202,8 @@ the fastest way to learn what the pipeline actually executes.
    configuration resolution chain, the environment handoff to child
    processes, and the shared importer toolkit.
 4. **[`src/rbt/tiles/engine.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/src/rbt/tiles/engine.py)**, then
-   `exporter.py`, `tippecanoe.py`, and `gdal_mvt.py` — both tile backends end
-   to end.
+   `exporter.py`, `tippecanoe.py`, `tile_join.py`, and `btis.py` — the tile
+   pipeline end to end.
 5. **One schema SQL file** (e.g.
    `setup/data-sources/schemas/physical/water-features.sql`) plus
    `rbt schema list` — where the `rbt.*` views that feed every layer come

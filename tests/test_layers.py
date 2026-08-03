@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from rbt.commands.tiles import CULTURAL_CATEGORY_FLAGS, PHYSICAL_CATEGORY_FLAGS
+from rbt.commands.tiles import (
+    CULTURAL_CATEGORY_FLAGS,
+    PHYSICAL_CATEGORY_FLAGS,
+    ProjectionChoice,
+    _projections_for,
+)
 from rbt.layers import LayerRegistryError, load_registry
 
 # Base for every malformed-config test: one valid cultural layer explicitly
@@ -84,44 +89,11 @@ def test_schema_missing_sql_field_raises(tmp_path: Path) -> None:
         _load(tmp_path, content)
 
 
-def test_gdal_mvt_missing_target_raises(tmp_path: Path) -> None:
-    content = (
-        _BASE
-        + """
-gdal_mvt:
-  datasets:
-    cultural:
-      groups:
-        building:
-          rbt.building: {minzoom: 10, maxzoom: 13}
-"""
-    )
-    with pytest.raises(LayerRegistryError, match="missing required field 'target'"):
-        _load(tmp_path, content)
-
-
-def test_gdal_mvt_missing_zoom_raises(tmp_path: Path) -> None:
-    content = (
-        _BASE
-        + """
-gdal_mvt:
-  datasets:
-    cultural:
-      groups:
-        building:
-          rbt.building: {target: building, maxzoom: 13}
-"""
-    )
-    with pytest.raises(LayerRegistryError, match="missing required field 'minzoom'"):
-        _load(tmp_path, content)
-
-
 def test_registry_loads() -> None:
     registry = load_registry()
     assert registry.btp_schema_version
-    assert "3857" in registry.projections
-    assert "3395" in registry.projections
-    assert "4326" in registry.projections
+    # Closed set: a re-added projection must fail loudly rather than ride along.
+    assert set(registry.projections) == {"3857", "3395"}
 
 
 def test_known_layer_keys_exist() -> None:
@@ -147,8 +119,20 @@ def test_filters_reachable() -> None:
 def test_physical_layer_projections() -> None:
     registry = load_registry()
     contour = registry.layer("contour")
-    assert "4326" not in contour.projections
-    assert "3857" in contour.projections
+    # contour declares its projections explicitly; pin the exact tuple so the
+    # declaration surviving the default-list change is verified, not assumed.
+    assert contour.projections == ("3857", "3395")
+
+
+def test_no_layer_declares_a_projection_outside_the_registry() -> None:
+    """Guards the coupling between ``_build_layer``'s default list and the
+    ``projections:`` section — a mismatch is a registry-load failure."""
+    registry = load_registry()
+    known = set(registry.projections)
+    for layer in registry.layers.values():
+        assert set(layer.projections) <= known, (
+            f"{layer.key} declares unknown projection(s) {set(layer.projections) - known}"
+        )
 
 
 def test_every_layer_has_source_table() -> None:
@@ -170,3 +154,19 @@ def test_cli_category_flag_tuples_match_live_registry() -> None:
     registry = load_registry()
     assert set(PHYSICAL_CATEGORY_FLAGS) == set(registry.categories_for("physical"))
     assert set(CULTURAL_CATEGORY_FLAGS) == set(registry.categories_for("cultural"))
+
+
+def test_cli_projection_choices_match_live_registry() -> None:
+    """``ProjectionChoice`` must equal the ``projections:`` section (plus ``all``).
+
+    Same drift class as the category flags above: the enum is hardcoded in
+    Python, so a projection added to or removed from ``config/layers.yml``
+    without touching it — or vice versa — must fail loudly here.
+    """
+    registry = load_registry()
+    assert {c.value for c in ProjectionChoice} - {"all"} == set(registry.projections)
+
+
+def test_projection_all_expands_to_both_mercator_projections() -> None:
+    registry = load_registry()
+    assert _projections_for(ProjectionChoice.all, registry) == ["3857", "3395"]

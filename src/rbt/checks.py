@@ -292,7 +292,7 @@ def smoke(settings: Settings) -> int:
     engine = TileEngine(settings=settings, registry=registry, dry_run=True)
     for layer_type, code, category in (
         ("physical", "3857", "water"),
-        ("cultural", "4326", "building"),
+        ("cultural", "3857", "building"),
     ):
         projection = registry.projections[code]
         layers = engine.resolve_layers(layer_type, categories=[category])
@@ -302,7 +302,6 @@ def smoke(settings: Settings) -> int:
                 projection=projection,
                 layers=layers,
                 output_dir=engine.output_dir_for(layer_type, projection),
-                categories=[category],
             )
         )
 

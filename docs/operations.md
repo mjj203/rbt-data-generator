@@ -112,9 +112,8 @@ of Liechtenstein (`tests/fixtures/liechtenstein-*.osm.pbf`, ~3.4 MB): imposm
 imports it into a PostGIS service container, `rbt schema run` builds the
 `water`/`landcover`/`highway`/`railway` units (empty reference-table stubs
 from `tests/fixtures/seed_reference_stubs.sql` stand in for the non-OSM
-sources), and `rbt tiles` generates and verifies output in all three
-projections — including tile-join + BTIS consolidation, which no per-PR job
-covers.
+sources), and `rbt tiles` generates and verifies output in both projections —
+including tile-join + BTIS consolidation, which no per-PR job covers.
 
 - **A red `nightly-osm-fixture` job is a real regression** in the import →
   schema → tiles path (or a fixture gone stale) — treat it like a failing PR
@@ -241,20 +240,9 @@ output/tiles/
 │   │   ├── water_3857.log            # per-layer export + tippecanoe log
 │   │   ├── physical_3857.mbtiles     # tile-join merge (+ BTIS metadata)
 │   │   └── merge_3857.log
-│   ├── 3395/                         # same shape as 3857
-│   └── 4326/
-│       ├── physical_tiles/           # tile DIRECTORY: {z}/{x}/{y}.pbf
-│       │   └── metadata.json
-│       └── physical_4326_mvt.log
-└── cultural/                         # same shape; 4326 dataset is cultural_tiles/
+│   └── 3395/                         # same shape as 3857
+└── cultural/                         # same shape
 ```
-
-!!! note "EPSG:4326 produces a directory, not MBTiles"
-    The 4326 backend (GDAL's MVT driver) writes a `{z}/{x}/{y}.pbf` tree plus
-    `metadata.json` — there is no `.mbtiles` file, and each run replaces the
-    whole directory. TileServer-GL's `mbtiles` sources cannot point at it;
-    serve the directory with any static file server (or MapProxy), e.g.
-    `python3 -m http.server -d output/tiles/physical/4326/physical_tiles`.
 
 To serve 3395 output or additional per-layer MBTiles, add entries to the
 `data` block of `config/tile-server.json` and restart the `tile-server`
@@ -292,7 +280,7 @@ into every container):
 | `output/logs/rbt_<timestamp>.log` | Default per-invocation log for mutating `rbt` commands (`--log-file` overrides, `--no-log-file` disables). |
 | `output/logs/schema_<key>_<timestamp>.log` | `psql` output of each `rbt schema run` unit. |
 | `output/logs/<importer>_<job>_<timestamp>.log` | Per-job importer logs (one file per download/ingest job). |
-| `output/tiles/<type>/<proj>/*.log` | Per-layer export/tippecanoe logs, `merge_<proj>.log`, `<type>_4326_mvt.log`. |
+| `output/tiles/<type>/<proj>/*.log` | Per-layer export/tippecanoe logs and `merge_<proj>.log`. |
 | `docker compose logs postgres` (stderr) | PostgreSQL server logs. `config/postgresql.conf` intentionally leaves `logging_collector` off (no writable `log_directory` is provisioned), so logs go to stderr and are captured by the container's log driver rather than rotated files under `/var/log/postgresql/`. |
 
 ## Maintenance

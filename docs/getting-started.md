@@ -21,7 +21,7 @@ graph TD
     C[NGA GNS GeoNames] -->|rbt import geonames| E
     D[Overture Maps buildings] -->|rbt import buildings| E
     E -->|rbt schema run| F[rbt.* SQL views]
-    F -->|rbt tiles| G[MBTiles / MVT directories<br/>under output/tiles/]
+    F -->|rbt tiles| G[MBTiles<br/>under output/tiles/]
     G --> H[TileServer-GL :8080]
     I[OSM replication diffs] -->|rbt osm run| E
 ```
@@ -230,9 +230,6 @@ uv run rbt tiles layer water --projection 3857                       # one layer
 uv run rbt tiles --layer-type physical --projection 3857 --force     # re-export cached FlatGeoBuf after a DB refresh
 uv run rbt layers list                                               # inspect the layer registry
 ```
-
-!!! note "EPSG:4326 uses a different backend"
-    Geographic tiles are produced by GDAL's native MVT driver in a single multi-table `ogr2ogr` call — no tippecanoe involved — and are written as a tile *directory* plus `metadata.json` rather than an `.mbtiles` file.
 
 In Docker, run the same commands through the tiles service:
 

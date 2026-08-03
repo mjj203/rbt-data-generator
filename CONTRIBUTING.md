@@ -91,8 +91,7 @@ The generators are data-driven; adding a layer means:
    `setup/data-sources/schemas/` and register it in the `schemas:` block of
    `config/layers.yml` if it's a new file.
 2. Add an entry to `config/layers.yml`: tippecanoe options and target
-   projections for the Mercator backends, and (if the layer should exist in
-   EPSG:4326) the source tables and zoom windows under `gdal_mvt:`.
+   projections for the layer.
 3. Verify with `rbt schema run <unit>` and
    `rbt tiles --layer-type <type> --layer <key> --dry-run`.
 

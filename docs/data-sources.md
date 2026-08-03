@@ -18,7 +18,7 @@ flowchart LR
     OV["Overture Maps<br/>buildings theme"] -->|ogr2ogr / DuckDB| OVS[("overture schema")]
     MIRTA["DoD MIRTA FY23"] -->|ogr2ogr| MS[("mirta schema")]
     PUB & RBTRAW & FMS & NES & OAS & GS & OVS & MS -->|rbt schema run| VIEWS[("rbt views")]
-    VIEWS -->|rbt tiles| TILES["MVT tiles<br/>3857 / 3395 / 4326"]
+    VIEWS -->|rbt tiles| TILES["MVT tiles<br/>3857 / 3395"]
 ```
 
 !!! warning "Licensing summary"
@@ -52,7 +52,7 @@ flowchart LR
   `stadium_*`, `radar_point`, `populated_places`, and the OSM half of
   `aeroway_surface`/`runway_curve`. On the physical side: `waterway`,
   `landcover*`, `park`, `mountain_label`, `inland_water_intermittent`, the
-  high-zoom halves of `glacier` and `builtuparea`, and the inland-water
+  OSM halves of `glacier` and `builtuparea`, and the inland-water
   component of `water`.
 
 ### OSM-derived coastline products (osmdata.openstreetmap.de)
@@ -62,10 +62,10 @@ the OSM community derives from the coastline:
 
 | Download | Table | Used by |
 |---|---|---|
-| `water-polygons-split-4326.zip` | `rbt.osm_ocean` | `water` (z10+) |
-| `simplified-water-polygons-split-3857.zip` | `rbt.osm_ocean_simplified` | `water` (low zooms via `rbt.water_simplified`) |
+| `water-polygons-split-4326.zip` | `rbt.osm_ocean` | `water` (z0–13, the ocean component of `rbt.water`) |
+| `simplified-water-polygons-split-3857.zip` | `rbt.osm_ocean_simplified` | `rbt.water_simplified`, which the schema SQL still creates but no tile layer currently reads. |
 | `coastlines-split-4326.zip` | `rbt.coastline` | Loaded but not currently referenced by any schema SQL — water/ocean splitting uses `osm_ocean`/`osm_ocean_simplified` instead. Kept for future coastline processing. |
-| `antarctica-icesheet-polygons-3857.zip` | `rbt.osm_antarctica_icesheet` | `glacier` (z7+ via `rbt.glacier_osm`) |
+| `antarctica-icesheet-polygons-3857.zip` | `rbt.osm_antarctica_icesheet` | `glacier` (z3–13, via `rbt.glacier_osm` into the `rbt.glacier` union) |
 
 These are regenerated daily by [osmdata.openstreetmap.de](https://osmdata.openstreetmap.de/)
 and carry the same ODbL terms as OSM itself.
@@ -193,8 +193,10 @@ and carry the same ODbL terms as OSM itself.
   --no-sign-request --region us-west-2 s3://overturemaps-us-west-2/release/`
   before pinning a new one. Bumping `OVERTURE_RELEASE` moves both the PostGIS
   import and the DuckDB export together — there is no separate pin to update.
-- **Feeds:** the `building` layer (`rbt.building`, plus the area-filtered
-  `rbt.building_z10/z11/z12` zoom variants used by the 4326 backend).
+- **Feeds:** the `building` layer (`rbt.building`, area-filtered per zoom by
+  the `filters.building` tippecanoe filter). The DuckDB export additionally
+  writes `building_z10/z11/z12` FlatGeoBuf tiers, which no tile layer
+  currently reads.
 
 ## MIRTA (DoD military installations)
 
