@@ -27,7 +27,7 @@ so run it after any install path below.
     The compose file provisions PostgreSQL (`postgis/postgis:18-3.6` with the
     tuned [`config/postgresql.conf`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/postgresql.conf) mounted) and
     builds a single multi-stage image
-    ([`Dockerfile.production`](https://github.com/MJJ203/rbt-data-generator/blob/main/Dockerfile.production): Ubuntu 24.04, PGDG
+    ([`Dockerfile.production`](https://github.com/MJJ203/rbt-data-generator/blob/main/Dockerfile.production): Ubuntu 26.04, PGDG
     client 18, Python 3.13 + GDAL 3.13.1 via micromamba/conda-forge, tippecanoe
     2.79.0 built from source, imposm3 0.14.2, and the `rbt` CLI). Behavior is
     selected per service via `command:`, not separate images.
@@ -65,15 +65,27 @@ so run it after any install path below.
         `docker build -f Dockerfile.production --build-arg IMPOSM_SHA256=<sha256> .`
         (the default `SKIP` bypasses the check for local development).
 
-=== "Ubuntu 24.04"
+=== "Ubuntu 26.04"
 
     These steps are modeled on `Dockerfile.production` but are not identical:
     the image only installs the PostgreSQL **client** (the `postgres` service
     itself always runs in a container) and roots its micromamba env at
     `/opt/conda`, whereas the bare-metal commands below also cover running the
     server locally and use micromamba's default `$HOME/micromamba` root.
-    Ubuntu 24.04's apt repo only ships GDAL 3.8.x and Python 3.12, so both
-    come from [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html)/conda-forge instead, to track current upstream releases.
+    Ubuntu's apt repo doesn't track the exact pinned GDAL/Python versions this
+    project targets, so both come from [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html)/conda-forge instead, to
+    stay on a known-good, reproducible release regardless of base-OS churn.
+
+    Alternatively, run [`tools/setup-ubuntu-vm.sh`](https://github.com/MJJ203/rbt-data-generator/blob/main/tools/setup-ubuntu-vm.sh)
+    to automate all of the steps below (plus DuckDB, needed for
+    `rbt export buildings`) on a fresh Ubuntu 26.04 host:
+
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/MJJ203/rbt-data-generator/main/tools/setup-ubuntu-vm.sh -o setup-ubuntu-vm.sh
+    chmod +x setup-ubuntu-vm.sh
+    sudo ./setup-ubuntu-vm.sh                                       # system deps only
+    sudo ./setup-ubuntu-vm.sh --with-postgres-server --with-rbt-cli # + local DB + rbt CLI
+    ```
 
     ```bash
     # PGDG repository for PostgreSQL 18

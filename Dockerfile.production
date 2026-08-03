@@ -7,7 +7,7 @@
 # compose `command:` field, not via separate images.
 # =============================================================================
 
-ARG UBUNTU_VERSION=24.04
+ARG UBUNTU_VERSION=26.04
 ARG POSTGRES_CLIENT_VERSION=18
 ARG IMPOSM_VERSION=0.14.2
 # Set to the actual sha256 of the imposm release tarball to enforce verification.
@@ -26,8 +26,9 @@ ARG DUCKDB_SHA256_ARM64=377f03fb9f17ab5a78f28f829cbfcb5333da8ab3c2d0788f27694f81
 
 # -----------------------------------------------------------------------------
 # Stage 1: base system with PostGIS client tools + a micromamba env providing
-# Python and GDAL (Ubuntu 24.04's apt repo only ships GDAL 3.8.x / Python 3.12,
-# so both come from conda-forge instead to track current upstream releases).
+# Python and GDAL (Ubuntu's apt repo doesn't track the exact pinned GDAL/Python
+# versions this project targets, so both come from conda-forge instead to stay
+# on a known-good, reproducible release regardless of base-OS churn).
 # -----------------------------------------------------------------------------
 FROM ubuntu:${UBUNTU_VERSION} AS base
 
