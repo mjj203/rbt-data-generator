@@ -2,8 +2,24 @@
 
 Ad-hoc utilities that run outside the main setup/production pipelines.
 
-There are currently no scripts here — the former bash utilities have been
-ported to the native `rbt` CLI (see below).
+## Bare-metal Ubuntu VM setup
+
+[`setup-ubuntu-vm.sh`](setup-ubuntu-vm.sh) bootstraps a bare-metal (or VM)
+Ubuntu 26.04 host with the same toolchain `Dockerfile.production` builds into
+the container image (PostgreSQL client, GDAL/Python via micromamba,
+tippecanoe, imposm3, DuckDB, AWS CLI), so `rbt` processing can run directly on
+the host without Docker. See [Installation](../docs/installation.md) for the
+manual, step-by-step equivalent.
+
+```bash
+sudo ./tools/setup-ubuntu-vm.sh                                       # system deps only
+sudo ./tools/setup-ubuntu-vm.sh --with-postgres-server --with-rbt-cli # + local DB + rbt CLI
+./tools/setup-ubuntu-vm.sh --help                                     # all flags/env vars
+```
+
+Version pins default to the same values as `Dockerfile.production`'s build
+`ARG`s and can be overridden via environment variable (e.g.
+`TIPPECANOE_REF=2.80.0 sudo -E ./tools/setup-ubuntu-vm.sh`).
 
 ## Where did the check scripts go?
 
