@@ -1,6 +1,6 @@
 # RBT Vector Tiles
 
-RBT Vector Tiles is an open-source pipeline that turns authoritative geospatial sources — OpenStreetMap, Natural Earth, FieldMaps, NGA GeoNames, OurAirports, and Overture Maps buildings — into multi-projection Mapbox Vector Tiles. Data is imported into PostGIS, shaped into a curated set of `rbt.*` SQL views, and rendered to MBTiles (EPSG:3857 and 3395 via tippecanoe) or MVT tile directories (EPSG:4326 via GDAL's MVT driver), ready to serve with TileServer-GL. A single Python CLI, `rbt`, orchestrates the whole pipeline.
+RBT Vector Tiles is an open-source pipeline that turns authoritative geospatial sources — OpenStreetMap, Natural Earth, FieldMaps, NGA GeoNames, OurAirports, and Overture Maps buildings — into multi-projection Mapbox Vector Tiles. Data is imported into PostGIS, shaped into a curated set of `rbt.*` SQL views, and rendered to MBTiles (EPSG:3857 and 3395 via tippecanoe), ready to serve with TileServer-GL. A single Python CLI, `rbt`, orchestrates the whole pipeline.
 
 [Start the tutorial](getting-started.md){ .md-button .md-button--primary }
 [Read the architecture](architecture.md){ .md-button }
@@ -45,7 +45,7 @@ RBT Vector Tiles is an open-source pipeline that turns authoritative geospatial 
 
 ## Highlights
 
-- **Multi-projection output** — Web Mercator (3857) and World Mercator (3395) rendered with tippecanoe and merged with `tile-join`; geographic (4326) rendered natively by GDAL's MVT driver in a single multi-table pass.
+- **Multi-projection output** — Web Mercator (3857) and World Mercator (3395) rendered with tippecanoe and merged with `tile-join`.
 - **Declarative layer registry** — every layer, zoom window, projection set, and tippecanoe filter lives in `config/layers.yml`; inspect it with `rbt layers list` and `rbt layers show KEY`.
 - **One orchestrator, fully native** — the `rbt` CLI dispatches every step of a fully native Python pipeline, including the four data importers (`src/rbt/importers/`); external geospatial binaries are invoked as subprocesses, and no bash remains in the runtime path.
 - **Container-native** — PostGIS, one-shot setup, continuous OSM updates, tile serving, smoke tests, and monitoring are Docker Compose profiles (`setup`, `production`, `serve`, `smoke`, `monitoring`).

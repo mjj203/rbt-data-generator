@@ -37,11 +37,11 @@ Every table below has an **Owner** column:
 
 | Variable | Owner | Default | Purpose |
 |---|---|---|---|
-| `TILE_CACHE_DIR` | Python | `./output/tiles` | Where MBTiles/PBF tiles are written. Read by the tile engine. |
+| `TILE_CACHE_DIR` | Python | `./output/tiles` | Where MBTiles are written. Read by the tile engine. |
 | `TILE_TEMP_DIR` | Python | `/tmp/tiles` | Scratch space for `tippecanoe -t`. Keep on fast storage. |
 | `TILE_MAX_ZOOM` | Python | `13` | Maximum zoom level. |
 | `TILE_MIN_ZOOM` | Python | `0` | Minimum zoom level. |
-| `SUPPORTED_PROJECTIONS` | Unused | `"3857 3395 4326"` | The CLI derives supported projections from `config/layers.yml` instead. |
+| `SUPPORTED_PROJECTIONS` | Unused | `"3857 3395"` | The CLI derives supported projections from `config/layers.yml` instead. |
 | `DEFAULT_PROJECTION` | Unused | `3857` | Loaded into `Settings.default_projection` but not read by `rbt tiles` or `rbt tiles layer` — Typer supplies its own defaults (`--projection all` and `--projection 3857` respectively) regardless of this value. Kept for backwards compatibility with existing rbt.conf files. |
 | `LAYER_TYPES` | Unused | `"physical cultural"` | The CLI hardcodes the same two types. |
 
@@ -147,15 +147,11 @@ fast with a `LayerRegistryError` instead of surfacing as confusing runtime
 errors deep in tile generation. Checks include:
 
 - **Missing required fields** — every layer needs `source_table`; every
-  projection needs `epsg`; every `gdal_mvt` source table needs `target`,
-  `minzoom`, and `maxzoom`.
+  projection needs `epsg`.
 - **Unknown projection codes** — a layer's `projections:` list must only
   reference codes declared under the top-level `projections:` section.
 - **Dangling category references** — every layer key listed under
   `categories.<type>.<category>` must exist under that layer type.
-- **Malformed `gdal_mvt` groups** — each entry under
-  `gdal_mvt.datasets.<type>.groups.<category>.<table>` is validated the same
-  way as a schema field, so a typo'd `minzoom` fails immediately.
 
 See the schema comment at the top of `config/layers.yml` (`:1-29`) for the
 full per-layer field reference. Example error for a layer referencing an

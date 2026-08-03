@@ -65,14 +65,18 @@ def test_tiles_all_expands_types_and_projections(tile_repo: Path, recorded_run) 
     assert any("rbt.waterway" in cmd for cmd in joined)
     assert any("rbt.building" in cmd for cmd in joined)
 
-    # …across all projections: 3857+3395 run tippecanoe per layer (water,
-    # waterway, building × 2 projections), 4326 runs one GDAL-MVT export per
-    # dataset and never invokes tippecanoe.
+    # …across both projections: tippecanoe runs once per layer per projection
+    # (water, waterway, building × 3857/3395).
     tip_cmds = _commands_for(recorded_run, "tippecanoe")
     assert len(tip_cmds) == 6
-    mvt_cmds = [cmd for cmd in recorded_run.commands if cmd[:3] == ["ogr2ogr", "-f", "MVT"]]
-    assert len(mvt_cmds) == 2
-    assert not any("4326" in part for cmd in tip_cmds for part in cmd)
+
+    # The EPSG:4326 GDAL-MVT tile-directory backend is gone: no MVT export is
+    # ever built, and every projection reached is one of the two Mercators.
+    assert not any(cmd[:3] == ["ogr2ogr", "-f", "MVT"] for cmd in recorded_run.commands)
+    assert {p for cmd in recorded_run.commands for p in cmd if "EPSG:" in p} == {
+        "EPSG:3857",
+        "EPSG:3395",
+    }
 
 
 def test_tiles_specific_layer_option(tile_repo: Path, recorded_run) -> None:
@@ -109,6 +113,22 @@ def test_tiles_layer_subcommand(tile_repo: Path, recorded_run) -> None:
     assert len(ogr_cmds) == 1
     assert "rbt.water" in ogr_cmds[0]
     assert len(_commands_for(recorded_run, "tippecanoe")) == 1
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["tiles", "--layer-type", "physical", "--projection", "4326", "--water", "--dry-run"],
+        ["tiles", "layer", "water", "--projection", "4326", "--dry-run"],
+    ],
+    ids=["tiles", "tiles-layer"],
+)
+def test_projection_4326_is_rejected(tile_repo: Path, recorded_run, argv: list[str]) -> None:
+    """EPSG:4326 tile output was removed; Typer must reject the value outright
+    rather than silently producing nothing."""
+    result = runner.invoke(app, ["--no-log-file", *argv])
+    assert result.exit_code == 2, result.output
+    assert recorded_run.calls == []
 
 
 def test_tiles_unknown_layer_errors(tile_repo: Path, recorded_run) -> None:

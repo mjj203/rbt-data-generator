@@ -6,7 +6,7 @@ A complete OpenStreetMap extract of Liechtenstein (~3.4 MB), used by the
 nightly integration workflow (`.github/workflows/nightly.yml`) to exercise the
 real import → schema → tiles pipeline end to end: imposm imports it into
 PostGIS, `rbt schema run` builds the `rbt.*` views on top, and `rbt tiles`
-generates output in all three projections.
+generates output in both projections.
 
 - **Source:** <https://download.geofabrik.de/europe/liechtenstein-latest.osm.pbf>
 - **Downloaded:** 2026-07-02
@@ -35,7 +35,7 @@ fixture glob if the naming changes (the workflow copies
 ## `seed_water.sql` / `seed_building.sql`
 
 Minimal synthetic `rbt.water` / `rbt.building` tables used by the per-PR
-`integration-tiles` CI job, which verifies the tile backends without running
+`integration-tiles` CI job, which verifies the tile pipeline without running
 any importer.
 
 ## `seed_reference_stubs.sql`

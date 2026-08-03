@@ -13,14 +13,13 @@ import pytest
 import rbt.process
 import rbt.schema
 import rbt.tiles.exporter
-import rbt.tiles.gdal_mvt
 import rbt.tiles.tile_join
 import rbt.tiles.tippecanoe
 from rbt import layers, paths
 
-# Minimal but representative registry: two tippecanoe layers (one per type),
-# one filter, a schemas block, and a gdal_mvt dataset with a zoom-variant
-# blend — enough to exercise every dispatch path without the real 600-line file.
+# Minimal but representative registry: three tippecanoe layers (one cultural,
+# two physical — one of which restricts its projections), one filter, and a
+# schemas block — enough to exercise every dispatch path without the real file.
 FAKE_LAYERS_YML = """\
 meta:
   btp_schema_version: "9.9.9"
@@ -71,33 +70,11 @@ schemas:
     sql: setup/data-sources/schemas/cultural/cultural-core.sql
     description: Core cultural views
 
-gdal_mvt:
-  tiling_scheme: "EPSG:4326,-180,180,360"
-  max_tile_size: 900000
-  max_features: 500000
-  datasets:
-    physical:
-      name: physical
-      description: Physical vector tiles dataset
-      groups:
-        water:
-          rbt.water_simplified: {target: water, minzoom: 0, maxzoom: 9}
-          rbt.water: {target: water, minzoom: 10, maxzoom: 13}
-    cultural:
-      name: cultural
-      description: Cultural vector tiles dataset
-      groups:
-        building:
-          rbt.building_z10: {target: building, minzoom: 10, maxzoom: 13}
-          rbt.building: {target: building, minzoom: 13, maxzoom: 13}
-
 projections:
   3857:
     epsg: "EPSG:3857"
   3395:
     epsg: "EPSG:3395"
-  4326:
-    epsg: "EPSG:4326"
 """
 
 FAKE_RBT_CONF = """\
@@ -211,7 +188,6 @@ def recorded_run(monkeypatch) -> RecordedRun:
     monkeypatch.setattr(rbt.tiles.exporter, "run_with_retry", recorder)
     monkeypatch.setattr(rbt.tiles.tippecanoe, "run", recorder)
     monkeypatch.setattr(rbt.tiles.tile_join, "run", recorder, raising=False)
-    monkeypatch.setattr(rbt.tiles.gdal_mvt, "run", recorder)
     monkeypatch.setattr(rbt.schema, "run", recorder)
     return recorder
 

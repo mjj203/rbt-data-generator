@@ -77,48 +77,6 @@ class SchemaFile:
 
 
 @dataclass(frozen=True, slots=True)
-class MvtSourceTable:
-    """One source table feeding the GDAL-MVT (EPSG:4326) backend.
-
-    Zoom-variant views (e.g. ``rbt.highway_z6``) map onto the same
-    ``target_name`` with different zoom windows, which is how the GDAL MVT
-    driver blends pre-simplified geometry per zoom range.
-    """
-
-    source_table: str
-    target_name: str
-    minzoom: int
-    maxzoom: int
-    description: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class MvtDataset:
-    """Per-layer-type dataset definition for the GDAL-MVT backend."""
-
-    name: str
-    description: str
-    groups: dict[str, tuple[MvtSourceTable, ...]]  # category -> tables
-
-    def tables_for(self, categories: list[str] | None = None) -> list[MvtSourceTable]:
-        selected = categories if categories else list(self.groups.keys())
-        tables: list[MvtSourceTable] = []
-        for category in selected:
-            tables.extend(self.groups.get(category, ()))
-        return tables
-
-
-@dataclass(frozen=True, slots=True)
-class MvtConfig:
-    """Settings for the EPSG:4326 GDAL-MVT tile backend."""
-
-    tiling_scheme: str
-    max_tile_size: int
-    max_features: int
-    datasets: dict[str, MvtDataset]  # layer_type -> dataset
-
-
-@dataclass(frozen=True, slots=True)
 class LayerRegistry:
     btp_schema_version: str
     defaults: dict[str, Any]
@@ -126,7 +84,6 @@ class LayerRegistry:
     projections: dict[str, Projection]
     layers: dict[str, Layer]
     categories: dict[str, dict[str, tuple[str, ...]]]
-    gdal_mvt: MvtConfig | None = None
     schemas: dict[str, SchemaFile] = field(default_factory=dict)
 
     def schemas_for_type(self, layer_type: str) -> list[SchemaFile]:
@@ -169,7 +126,7 @@ def _build_layer(
     ogr_raw = raw.get("ogr2ogr", {}) or {}
     tipp_raw = raw.get("tippecanoe", {}) or {}
 
-    projections = tuple(str(p) for p in raw.get("projections", ["3857", "3395", "4326"]))
+    projections = tuple(str(p) for p in raw.get("projections", ["3857", "3395"]))
     unknown_projections = set(projections) - known_projections
     if unknown_projections:
         raise LayerRegistryError(
@@ -271,48 +228,7 @@ def load_registry(path: Path | None = None) -> LayerRegistry:
         projections=projections,
         layers=layers,
         categories=categories,
-        gdal_mvt=_build_mvt_config(raw.get("gdal_mvt")),
         schemas=schemas,
-    )
-
-
-def _build_mvt_source_table(table: str, spec: dict[str, Any], *, context: str) -> MvtSourceTable:
-    target = _require(spec, "target", context=context)
-    return MvtSourceTable(
-        source_table=str(table),
-        target_name=str(target),
-        minzoom=int(_require(spec, "minzoom", context=context)),
-        maxzoom=int(_require(spec, "maxzoom", context=context)),
-        description=str(spec.get("description", target)),
-    )
-
-
-def _build_mvt_config(raw: dict[str, Any] | None) -> MvtConfig | None:
-    if not raw:
-        return None
-    datasets: dict[str, MvtDataset] = {}
-    for layer_type, ds_raw in (raw.get("datasets", {}) or {}).items():
-        groups: dict[str, tuple[MvtSourceTable, ...]] = {}
-        for category, tables_raw in (ds_raw.get("groups", {}) or {}).items():
-            tables = tuple(
-                _build_mvt_source_table(
-                    table,
-                    spec,
-                    context=f"gdal_mvt.datasets.{layer_type}.groups.{category}.{table}",
-                )
-                for table, spec in (tables_raw or {}).items()
-            )
-            groups[str(category)] = tables
-        datasets[str(layer_type)] = MvtDataset(
-            name=str(ds_raw.get("name", layer_type)),
-            description=str(ds_raw.get("description", f"{layer_type} vector tiles dataset")),
-            groups=groups,
-        )
-    return MvtConfig(
-        tiling_scheme=str(raw.get("tiling_scheme", "EPSG:4326,-180,180,360")),
-        max_tile_size=int(raw.get("max_tile_size", 900000)),
-        max_features=int(raw.get("max_features", 500000)),
-        datasets=datasets,
     )
 
 
@@ -320,9 +236,6 @@ __all__ = [
     "Layer",
     "LayerRegistry",
     "LayerRegistryError",
-    "MvtConfig",
-    "MvtDataset",
-    "MvtSourceTable",
     "OgrOptions",
     "Projection",
     "SchemaFile",

@@ -36,7 +36,6 @@ class ProjectionChoice(str, Enum):
 
     p3857 = "3857"
     p3395 = "3395"
-    p4326 = "4326"
     all = "all"
 
 
@@ -188,7 +187,6 @@ def _dispatch_native(request: TileRequest, settings: Settings, log: logging.Logg
                 output_dir=output_dir,
                 tile_join=request.tile_join,
                 add_btis=request.add_btis,
-                categories=categories or None,
             )
             log.info(
                 "generating %d %s layer(s) for EPSG:%s → %s",

@@ -9,7 +9,7 @@ with [Getting Started](getting-started.md).
 | Requirement | Version | Used for |
 |---|---|---|
 | PostgreSQL + PostGIS | 18 + 3.6 | The spatial database all imports land in. |
-| GDAL/OGR (`ogr2ogr`) | 3.13+ with MVT and FlatGeoBuf drivers | FlatGeoBuf exports (3857/3395) and the EPSG:4326 MVT backend. |
+| GDAL/OGR (`ogr2ogr`) | 3.13+ with the FlatGeoBuf driver | FlatGeoBuf exports (3857/3395) and importer data loads. |
 | imposm3 | 0.14.2 | OSM planet import and continuous diff updates (Linux x86-64 only). |
 | tippecanoe (felt fork) | 2.79.0 | MBTiles generation for 3857/3395, plus `tile-join` and `tippecanoe-decode`. |
 | Python | 3.13+ ([uv](https://docs.astral.sh/uv/) recommended) | The `rbt` CLI. |

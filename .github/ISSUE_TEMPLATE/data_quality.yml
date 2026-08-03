@@ -35,7 +35,6 @@ body:
       options:
         - "3857 (Web Mercator)"
         - "3395 (World Mercator)"
-        - "4326 (Geographic)"
         - all / not sure
     validations:
       required: true

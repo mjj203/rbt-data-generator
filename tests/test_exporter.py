@@ -31,7 +31,7 @@ _BASE_LAYER = Layer(
     mbtiles_name="water",
     min_zoom=0,
     max_zoom=13,
-    projections=("3857", "3395", "4326"),
+    projections=("3857", "3395"),
     ogr=OgrOptions(),
     tippecanoe=TippecanoeOptions(),
 )

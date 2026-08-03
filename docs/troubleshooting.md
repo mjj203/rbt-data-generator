@@ -41,8 +41,7 @@ All `rbt` commands that mutate state duplicate their logs to
   job (e.g. `geonames_geonames_fr_<timestamp>.log`).
 - Per-layer tile logs live next to the tiles:
   `output/tiles/<layer_type>/<projection>/<layer>_<projection>.log`, plus
-  `merge_<projection>.log` for tile-join and `<layer_type>_4326_mvt.log`
-  for the EPSG:4326 backend.
+  `merge_<projection>.log` for tile-join.
 
 ## Database connection fails
 
@@ -96,8 +95,8 @@ rbt tiles layer water --projection 3857 --dry-run
 
 ### Stale FlatGeoBuf cache (3857/3395)
 
-The Mercator backends export each layer to a FlatGeoBuf file before running
-tippecanoe and **reuse an existing `.fgb` on the next run** (you will see a
+The tile pipeline exports each layer to a FlatGeoBuf file before running
+tippecanoe and **reuses an existing `.fgb` on the next run** (you will see a
 `REUSING cached export` warning in the log). After a database refresh or
 `rbt schema run`, the cached export is stale and silently produces stale
 tiles. Pass `--force` to re-export:
@@ -107,23 +106,11 @@ rbt tiles --layer-type physical --projection 3857 --water --force
 rbt tiles layer water --projection 3857 --force
 ```
 
-### EPSG:4326 output is a directory, not MBTiles
-
-The 4326 backend uses GDAL's MVT driver, not tippecanoe. Expect:
-
-- Output is a **tile directory** (`output/tiles/<layer_type>/4326/<dataset>_tiles/{z}/{x}/{y}.pbf`
-  plus `metadata.json`), never an `.mbtiles` file.
-- `--tile-join` and `--add-btis` do not apply to 4326.
-- Each run **deletes and rewrites the whole tile directory** — do not point a
-  live tile server at it mid-generation.
-- One multi-table `ogr2ogr -f MVT` call produces the dataset; check
-  `<layer_type>_4326_mvt.log` in the output directory for driver errors.
-
 ### Suspected engine regressions
 
-The nightly `nightly-osm-fixture` workflow generates and verifies tiles from
-a known fixture in all three projections — compare a red/green nightly run
-against your change before assuming a local misconfiguration. The frozen
+The nightly `nightly-osm-fixture` workflow generates and verifies tiles from a
+known fixture in both projections — compare a red/green nightly run against
+your change before assuming a local misconfiguration. The frozen
 tippecanoe command pin in `tests/test_tippecanoe_golden.py` catches
 unintended registry drift.
 

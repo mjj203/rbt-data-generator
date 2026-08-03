@@ -2,10 +2,9 @@
 
 !!! warning "Script names below are historical"
     This page predates the `rbt` Python CLI and still describes the original
-    standalone scripts and `cultural_layer_config.json`, which **no longer
-    exist**. The underlying SQL algorithms and processing concepts described
-    here are still broadly accurate, but to actually run anything, use
-    today's commands:
+    standalone scripts, which **no longer exist**. The underlying SQL
+    algorithms and processing concepts described here are still broadly
+    accurate, but to actually run anything, use today's commands:
 
     - Schema processing: `rbt schema list` shows the registered units. `rbt
       schema run cultural` dispatches only `cultural-core.sql` — the other
@@ -16,9 +15,9 @@
         - `rbt schema run railway` → `transportation-railway.sql`
         - `rbt schema run aero` → `infrastructure.sql`
         - `rbt schema run --type cultural` or `rbt schema run --all` → every cultural unit
-    - Tile generation: `rbt tiles --layer-type cultural --projection <3857|3395|4326> [--building|--transportation|...]`
-      (see the [CLI Reference](cli.md)). `cultural_layer_config.json` is
-      replaced by the declarative layer/filter definitions in
+    - Tile generation: `rbt tiles --layer-type cultural --projection <3857|3395> [--building|--transportation|...]`
+      (see the [CLI Reference](cli.md)). Layer properties, filters, and zoom
+      levels come from the declarative layer/filter definitions in
       [`config/layers.yml`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/layers.yml)
       — inspect it with `rbt layers list` / `rbt layers show <key>`.
 
@@ -42,19 +41,18 @@ This directory contains the complete workflow for processing cultural geospatial
 The cultural data processing workflow consists of three main components:
 
 1. **Database Layer** (`cultural-core.sql`, `transportation.sql`, `transportation-railway.sql`, `infrastructure.sql`): Creates materialized views, indexes, and optimized data structures in PostgreSQL/PostGIS
-2. **Tile Generation** (3 projection scripts): Exports data and generates vector tiles using different coordinate systems
-3. **Configuration** (`cultural_layer_config.json`): Defines layer properties and zoom levels for tile generation
+2. **Tile Generation** (2 projection pipelines): Exports data and generates vector tiles using different coordinate systems
+3. **Configuration** (`config/layers.yml`): Defines layer properties, filters, and zoom levels for tile generation
 
 ```
 PostgreSQL Database (rbt schema)
         ↓
     Schema processing (via setup/data-sources/schemas/cultural/)
         ↓
-    Three parallel pipelines:
+    Two parallel pipelines:
     rbt tiles --layer-type cultural:
     ├── --projection 3395 → EPSG:3395 (World Mercator — tippecanoe backend)
-    ├── --projection 3857 → EPSG:3857 (Web Mercator — tippecanoe backend)
-    └── --projection 4326 → EPSG:4326 (WGS 84 — GDAL MVT backend)
+    └── --projection 3857 → EPSG:3857 (Web Mercator — tippecanoe backend)
         ↓
     MBTiles output (consolidated vector tiles)
 ```
@@ -258,26 +256,6 @@ WITH railway_subclass AS (
 - BTIS metadata is added the same way as 3395 — `rbt tiles` defaults
   `--add-btis` to on for both mercator projections (see [BTIS Metadata](#btis-metadata) below)
 
-### EPSG:4326 Pipeline (Geographic WGS 84)
-
-`rbt tiles --layer-type cultural --projection 4326` uses GDAL's MVT driver for direct generation (see the `gdal_mvt:` section of `config/layers.yml`).
-
-#### Key Characteristics:
-- Uses degrees for coordinates
-- No projection distortion
-- Custom tiling scheme required
-
-#### Unique Approach:
-```bash
-ogr2ogr \
-  -f MVT \                           # Mapbox Vector Tiles format
-  -t_srs EPSG:4326 \                # Target SRS
-  "$OUTPUT_DIR" \
-  "$DB_CONNECTION" \
-  -dsco FORMAT=DIRECTORY \           # Directory-based tile structure
-  -dsco TILING_SCHEME="EPSG:4326,-180,180,360"  # Custom scheme
-```
-
 ## Layer Categories
 
 ### 1. Aeroway (Aviation)
@@ -313,6 +291,16 @@ ogr2ogr \
 - Height and area attributes preserved
 - Hilbert curve ordering for efficient tiling
 
+!!! note "The `building_z*` views are not created"
+    `building_z10`, `building_z11`, and `building_z12` have their DDL commented
+    out in `cultural-core.sql`, alongside `rbt.building`'s own — the Overture
+    building tables are loaded by `rbt import buildings` rather than built by
+    the schema unit. The `building` tile layer exports `rbt.building` and does
+    its zoom-based generalization with the tippecanoe area filters in
+    `filters.building` (≥ 5000 m² at z10, ≥ 2500 at z11, ≥ 1500 at z12); the
+    DuckDB export in `setup/data-sources/overture/duckdb-building-export.sql`
+    applies the same thresholds to its own `rbt_building_z1*` views.
+
 ### 4. Transportation
 
 **Tables:** `highway`, `railway`, `ferry`, `lock`, `port_surface`, `railway_station`, `yard_label`
@@ -320,7 +308,10 @@ ogr2ogr \
 **Purpose:** All transportation infrastructure
 
 **Highway Processing:**
-- Zoom-specific views (z4-z12) with different feature selection
+- Zoom-specific views (z4-z12) with different feature selection — still
+  created by the schema SQL, but no tile layer reads them today; the
+  `highway` layer exports `rbt.highway` and leaves per-zoom thinning to
+  tippecanoe
 - Reference number extraction and formatting
 - Surface classification
 
@@ -347,7 +338,11 @@ ogr2ogr \
 **Purpose:** Geographic place names and hydrographic features
 
 **Processing Strategy:**
-- Zoom-specific views for density management
+- Zoom-specific views for density management — the
+  `geonames_hydrographic_z*` and `populated_places_z*` variants are still
+  created by the schema SQL, but no tile layer reads them today; the tile
+  layers export the base views and manage density with the per-zoom
+  tippecanoe filters `filters.hydrographic` / `filters.populated_places`
 - Population-based ranking for places
 - Feature class filtering
 
@@ -451,11 +446,9 @@ tippecanoe -o "$OUTPUT_DIR/airports_3395.mbtiles" \
 
 | Option | Description | Example |
 |--------|-------------|---------|
-| `-f` | Output format | `-f MVT` for Mapbox Vector Tiles |
 | `-t_srs` | Target spatial reference | `-t_srs EPSG:3857` |
 | `-lco` | Layer creation option | `-lco SPATIAL_INDEX=NO` |
 | `-oo` | Open option | `-oo ACTIVE_SCHEMA=rbt` |
-| `-dsco` | Dataset creation option | `-dsco FORMAT=DIRECTORY` |
 | `-sql` | SQL query | `-sql "SELECT * FROM table"` |
 | `-skipfailures` | Continue on errors | Useful for bad geometries |
 

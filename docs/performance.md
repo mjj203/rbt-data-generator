@@ -85,7 +85,7 @@ grow.
 | imposm3 cache | `OSM_CACHE_DIR` (containers: `/app/output/osm/cache`; bare code default `/mnt/cache`) | ~100 – 200 GB |
 | OSM diffs | `OSM_DIFF_DIR` (containers: `/app/output/osm/diff`; bare code default `/mnt/diff`) | small; grows with the update window |
 | PostgreSQL cluster | server data directory | ~1 – 2 TB after all imports, indexes, and materialized views |
-| FlatGeoBuf exports + MBTiles + 4326 tile dirs | `TILE_CACHE_DIR` (default `./output/tiles`) | ~200 – 500 GB |
+| FlatGeoBuf exports + MBTiles | `TILE_CACHE_DIR` (default `./output/tiles`) | ~200 – 500 GB |
 | tippecanoe scratch | `TILE_TEMP_DIR` (default `/tmp/tiles`) | tens of GB, transient |
 | **Total** | | **~2.5 – 4 TB** |
 
@@ -127,10 +127,6 @@ I/O-bound while materializing zoom levels, so:
   you have RAM to spare.
 - Keep `TILE_TEMP_DIR` and `TILE_CACHE_DIR` on different devices than the
   PostgreSQL data directory when generating tiles on the database host.
-
-The EPSG:4326 backend (GDAL MVT driver) does not use tippecanoe; its
-bottleneck is the database read and the single `ogr2ogr` process writing the
-tile directory.
 
 ## Parallelism knobs
 

@@ -13,7 +13,7 @@ Overture Maps, FieldMaps, OurAirports).
 
 ## Highlights
 
-- **Multi-projection**: Web Mercator (3857), World Mercator (3395), Geographic (4326)
+- **Multi-projection**: Web Mercator (3857), World Mercator (3395)
 - **Two-phase pipeline**: one-time database initialization, then continuous OSM
   updates and on-demand tile generation
 - **One CLI**: every operation runs through `rbt` — setup, imports, schema
@@ -65,7 +65,7 @@ for a guided walkthrough using a small regional extract.
 ## Prerequisites
 
 - PostgreSQL 18 with PostGIS 3.6
-- GDAL/OGR 3.13+ with MVT and FlatGeoBuf drivers
+- GDAL/OGR 3.13+ with the FlatGeoBuf driver
 - imposm3 0.14.2+
 - tippecanoe (felt/tippecanoe fork) 2.79.0+
 - aria2 (`aria2c`), osmium-tool, and osmosis (OSM planet download + diff processing)
@@ -81,7 +81,7 @@ for a guided walkthrough using a small regional extract.
 rbt-data-generator/
 ├── config/                        # rbt.conf + layers.yml (declarative layer registry)
 ├── src/rbt/                       # The rbt CLI — all orchestration (Python/Typer)
-│   ├── tiles/                     #   tippecanoe (3857/3395) + GDAL-MVT (4326) backends
+│   ├── tiles/                     #   tippecanoe tile engine (3857/3395)
 │   ├── importers/                 #   native data importers (OSM, reference, GeoNames, Overture)
 │   ├── schema.py / setup_db.py    #   schema dispatch + database bootstrap
 │   └── checks.py                  #   rbt validate / smoke / health

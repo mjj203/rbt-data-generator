@@ -34,4 +34,4 @@ comparisons reported `PARITY BRIDGE: all comparisons passed`).
 - `tests/test_layers.py::test_cli_category_flag_tuples_match_live_registry` —
   the registry↔CLI-flag consistency guardrail.
 - The nightly `nightly-osm-fixture` job — continuous end-to-end verification
-  of the native engine against real OSM data in all three projections.
+  of the native engine against real OSM data in both projections.
